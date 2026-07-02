@@ -31,47 +31,6 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
     }
 });
 
-// Seed default polls definition
-const DEFAULT_POLLS = [
-    {
-        id: 'poll_seed_1',
-        title: '2026 年最期待的科技趨勢是什麼？',
-        description: '隨著技術飛速發展，哪一項科技變革將在 2026 年對人類社會與工作型態帶來最深遠的影響？',
-        createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-        options: [
-            { id: 'opt_s1_1', text: 'AI 代理與自主工作流 (Autonomous AI Agents)', votes: 12 },
-            { id: 'opt_s1_2', text: '通用人工智慧突破 (AGI Breakthrough)', votes: 8 },
-            { id: 'opt_s1_3', text: '空間運算與輕量化 AR 眼鏡 (Spatial Computing)', votes: 5 },
-            { id: 'opt_s1_4', text: '量子運算雲端商用化 (Commercial Quantum Computing)', votes: 2 }
-        ]
-    },
-    {
-        id: 'poll_seed_2',
-        title: '下一次團隊聚餐想吃什麼？',
-        description: '辛勤工作後的放鬆聚會！請大家投下神聖的一票，我們將依據投票結果訂位。如果有其他想吃的也可以自行新增！',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        options: [
-            { id: 'opt_s2_1', text: '經典麻辣鴛鴦火鍋', votes: 4 },
-            { id: 'opt_s2_2', text: '日式炭火串燒居酒屋', votes: 6 },
-            { id: 'opt_s2_3', text: '美式精釀啤酒餐酒館', votes: 3 },
-            { id: 'opt_s2_4', text: '米其林精緻無菜單法式料理', votes: 1 }
-        ]
-    },
-    {
-        id: 'poll_seed_3',
-        title: '您最喜愛或最常使用的程式語言是？',
-        description: '開發者生態調查！不管是前端、後端、系統開發或 AI，哪款語言是你的生產力首選？',
-        createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-        options: [
-            { id: 'opt_s3_1', text: 'TypeScript / JavaScript', votes: 14 },
-            { id: 'opt_s3_2', text: 'Rust', votes: 8 },
-            { id: 'opt_s3_3', text: 'Python', votes: 11 },
-            { id: 'opt_s3_4', text: 'Go', votes: 6 },
-            { id: 'opt_s3_5', text: 'Kotlin / Swift', votes: 3 }
-        ]
-    }
-];
-
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS polls (
         id TEXT PRIMARY KEY,
@@ -99,43 +58,13 @@ db.serialize(() => {
         FOREIGN KEY(optionId) REFERENCES options(id) ON DELETE CASCADE
     )`);
 
-    // Check if database needs seeding
+    // Check database status
     db.get("SELECT COUNT(*) as count FROM polls", (err, row) => {
         if (err) {
             console.error("檢查資料表時發生錯誤:", err);
             return;
         }
-        if (row.count === 0) {
-            console.log("資料庫無資料，開始寫入預設投票與模擬選票...");
-            
-            const stmtPoll = db.prepare("INSERT INTO polls (id, title, description, createdAt, deletePassword) VALUES (?, ?, ?, ?, ?)");
-            const stmtOpt = db.prepare("INSERT INTO options (id, pollId, text) VALUES (?, ?, ?)");
-            const stmtVote = db.prepare("INSERT INTO votes (pollId, optionId, voterId, username, createdAt) VALUES (?, ?, ?, ?, ?)");
-            
-            DEFAULT_POLLS.forEach(poll => {
-                // Set default deletion password to 'admin' for demo seed polls
-                stmtPoll.run(poll.id, poll.title, poll.description, poll.createdAt, 'admin');
-                
-                poll.options.forEach(opt => {
-                    stmtOpt.run(opt.id, poll.id, opt.text);
-                    
-                    // Insert mock votes to populate UI lists
-                    for (let i = 0; i < opt.votes; i++) {
-                        const mockVoterId = `mock_voter_${poll.id}_${opt.id}_${i}`;
-                        const mockNames = ['Alice', 'Bob', 'Charlie', 'David', 'Eva', 'Frank', 'Grace'];
-                        const mockUsername = i % 4 === 0 ? mockNames[i % mockNames.length] : '匿名';
-                        stmtVote.run(poll.id, opt.id, mockVoterId, mockUsername, poll.createdAt);
-                    }
-                });
-            });
-            
-            stmtPoll.finalize();
-            stmtOpt.finalize();
-            stmtVote.finalize((err) => {
-                if (err) console.error("模擬選票寫入失敗:", err);
-                else console.log("預設投票主題與模擬選票寫入完畢！");
-            });
-        }
+        console.log(`資料庫連線成功。目前有 ${row ? row.count : 0} 個投票主題。`);
     });
 });
 
