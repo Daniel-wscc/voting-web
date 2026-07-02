@@ -161,10 +161,9 @@
                 <div class="modal-body">
                     <div class="create-poll-grid">
                         <!-- Left Column: Title, Description, Options -->
-                        <div class="create-poll-col-left">
                             <div class="form-group">
                                 <label for="poll-title-input">投票問題 / 主題 *</label>
-                                <input type="text" id="poll-title-input" placeholder="例如：今天午餐吃什麼？" required maxlength="100">
+                                <input type="text" id="poll-title-input" placeholder="例如：今天午餐吃什麼？" required maxlength="100" autocomplete="off">
                             </div>
                             
                             <div class="form-group">
@@ -176,11 +175,11 @@
                                 <label>投票選項 (至少兩個)</label>
                                 <div id="modal-options-list" class="modal-options-list scrollable-options">
                                     <div class="modal-option-row">
-                                        <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80">
+                                        <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80" autocomplete="off">
                                         <span class="drag-placeholder"></span>
                                     </div>
                                     <div class="modal-option-row">
-                                        <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80">
+                                        <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80" autocomplete="off">
                                         <span class="drag-placeholder"></span>
                                     </div>
                                 </div>
@@ -208,7 +207,7 @@
 
                             <div class="form-group">
                                 <label for="poll-password-input">設定投票管理密碼 (選填)</label>
-                                <input type="password" id="poll-password-input" placeholder="管理者可用此密碼進行選票管理與刪除主題" maxlength="20">
+                                <input type="password" id="poll-password-input" placeholder="管理者可用此密碼進行選票管理與刪除主題" maxlength="20" autocomplete="new-password">
                             </div>
 
                             <div class="form-group">

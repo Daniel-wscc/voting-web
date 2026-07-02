@@ -496,9 +496,8 @@ function setupEventListeners() {
     });
 
     // Close Modal
-    [elBtnCloseModal, elBtnCancelPoll].forEach(btn => {
-        if (btn) btn.addEventListener('click', closeCreateModal);
-    });
+    if (elBtnCloseModal) elBtnCloseModal.addEventListener('click', closeCreateModal);
+    if (elBtnCancelPoll) elBtnCancelPoll.addEventListener('click', handleCancelPollClick);
     
     // Add extra option row in modal
     elBtnAddModalOption.addEventListener('click', addModalOptionField);
@@ -506,12 +505,6 @@ function setupEventListeners() {
     // Form submissions
     elCreatePollForm.addEventListener('submit', handleCreatePoll);
     elAddOptionForm.addEventListener('submit', handleAddOption);
-    
-    elCreateModal.addEventListener('click', (e) => {
-        if (e.target === elCreateModal) {
-            closeCreateModal();
-        }
-    });
 
     // Management bindings
     elBtnManagePoll.addEventListener('click', handleManagePollClick);
@@ -809,6 +802,7 @@ async function handleCreatePoll(e) {
         activePollId = createdPoll.id;
         
         closeCreateModal();
+        resetCreateForm();
         elSearchInput.value = '';
         showToast('新投票主題已發佈！', 'success');
     } catch (e) {
@@ -859,7 +853,13 @@ function clearImageUpload() {
 function openCreateModal() {
     elCreateModal.classList.remove('hidden');
     document.getElementById('poll-title-input').focus();
-    
+}
+
+function closeCreateModal() {
+    elCreateModal.classList.add('hidden');
+}
+
+function resetCreateForm() {
     document.getElementById('poll-title-input').value = '';
     document.getElementById('poll-desc-input').value = '';
     document.getElementById('poll-password-input').value = '';
@@ -872,19 +872,34 @@ function openCreateModal() {
     
     elModalOptionsList.innerHTML = `
         <div class="modal-option-row">
-            <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80">
+            <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80" autocomplete="off">
             <span class="drag-placeholder"></span>
         </div>
         <div class="modal-option-row">
-            <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80">
+            <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80" autocomplete="off">
             <span class="drag-placeholder"></span>
         </div>
     `;
 }
 
-function closeCreateModal() {
-    elCreateModal.classList.add('hidden');
-    clearImageUpload();
+function handleCancelPollClick() {
+    const title = document.getElementById('poll-title-input').value.trim();
+    const desc = document.getElementById('poll-desc-input').value.trim();
+    
+    // Check if any option input is filled
+    const optionInputs = elModalOptionsList.querySelectorAll('.modal-option-input');
+    let hasOptionContent = false;
+    optionInputs.forEach(input => {
+        if (input.value.trim() !== '') hasOptionContent = true;
+    });
+    
+    if (title || desc || hasOptionContent) {
+        const confirmCancel = confirm('確定要取消並清除已輸入的投票內容嗎？');
+        if (!confirmCancel) return;
+    }
+    
+    resetCreateForm();
+    closeCreateModal();
 }
 
 function addModalOptionField() {
@@ -895,7 +910,7 @@ function addModalOptionField() {
     row.className = 'modal-option-row animate-scale-up';
     
     row.innerHTML = `
-        <input type="text" class="modal-option-input" placeholder="選項 ${index}" required maxlength="80">
+        <input type="text" class="modal-option-input" placeholder="選項 ${index}" required maxlength="80" autocomplete="off">
         <button type="button" class="btn-remove-option" title="刪除選項">
             <i data-lucide="trash-2"></i>
         </button>
