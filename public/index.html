@@ -57,7 +57,11 @@
             <!-- App Header Bar -->
             <header class="app-header">
                 <div class="user-profile-widget">
-                    <i data-lucide="user" class="user-icon"></i>
+                    <div class="avatar-upload-wrapper" id="profile-avatar-trigger" title="點擊上傳頭像">
+                        <i data-lucide="user" class="user-icon" id="profile-avatar-icon"></i>
+                        <img id="profile-avatar-preview" src="" alt="大頭貼" class="hidden">
+                        <input type="file" id="profile-avatar-input" accept="image/*" style="display: none;">
+                    </div>
                     <span class="user-name-label">您的暱稱：</span>
                     <input type="text" id="username-input" placeholder="匿名" maxlength="20">
                 </div>

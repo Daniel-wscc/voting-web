@@ -10,6 +10,7 @@ let verifiedPollPassword = '';
 // Voter Identification
 let voterId = null;
 let voterName = '匿名';
+let voterAvatar = null; // Base64 image string
 
 // --- DOM Selector Elements ---
 const elPollsList = document.getElementById('polls-list');
@@ -54,6 +55,13 @@ const elManagePasswordInput = document.getElementById('manage-password-input');
 const elAuthErrorMsg = document.getElementById('auth-error-msg');
 const elBtnCloseAuthModal = document.getElementById('btn-close-auth-modal');
 const elBtnCancelAuth = document.getElementById('btn-cancel-auth');
+
+// Avatar selectors
+const elProfileAvatarTrigger = document.getElementById('profile-avatar-trigger');
+const elProfileAvatarInput = document.getElementById('profile-avatar-input');
+const elProfileAvatarIcon = document.getElementById('profile-avatar-icon');
+const elProfileAvatarPreview = document.getElementById('profile-avatar-preview');
+
 // New settings selectors
 const elPollAllowMultiple = document.getElementById('poll-allow-multiple');
 const elPollAllowUserOptions = document.getElementById('poll-allow-user-options');
@@ -103,6 +111,13 @@ function initVoterIdentity() {
         }
         voterName = name;
         
+        // 3. Get Voter Avatar
+        let avatar = localStorage.getItem('decidely_voter_avatar');
+        if (avatar) {
+            voterAvatar = avatar;
+            renderVoterAvatarHeader();
+        }
+        
         // Populate input field
         if (elUsernameInput) {
             elUsernameInput.value = voterName;
@@ -110,6 +125,18 @@ function initVoterIdentity() {
     } catch (e) {
         console.error('初始化使用者識別碼時發生錯誤:', e);
         voterId = `voter_fallback_${Date.now()}`;
+    }
+}
+
+function renderVoterAvatarHeader() {
+    if (voterAvatar) {
+        elProfileAvatarPreview.src = voterAvatar;
+        elProfileAvatarPreview.classList.remove('hidden');
+        elProfileAvatarIcon.classList.add('hidden');
+    } else {
+        elProfileAvatarPreview.src = '';
+        elProfileAvatarPreview.classList.add('hidden');
+        elProfileAvatarIcon.classList.remove('hidden');
     }
 }
 
@@ -406,8 +433,18 @@ function renderActivePoll() {
             option.voters.forEach(v => {
                 const badge = document.createElement('span');
                 badge.className = 'voter-badge';
+                let avatarHTML = '';
+                if (v.avatarUrl) {
+                    avatarHTML = `<img src="${v.avatarUrl}" alt="Avatar" class="voter-badge-avatar" style="width: 16px; height: 16px; border-radius: 50%; object-fit: cover; margin-right: 6px;">`;
+                } else {
+                    avatarHTML = `<i data-lucide="user" class="voter-badge-avatar-icon" style="width: 12px; height: 12px; margin-right: 6px; color: var(--text-muted);"></i>`;
+                }
+                
                 badge.innerHTML = `
-                    <span>${escapeHTML(v.username)}</span>
+                    <div class="voter-badge-content" style="display: flex; align-items: center;">
+                        ${avatarHTML}
+                        <span>${escapeHTML(v.username)}</span>
+                    </div>
                     <button type="button" class="btn-delete-vote" title="剔除此選票">
                         <i data-lucide="x"></i>
                     </button>
@@ -440,7 +477,7 @@ function renderActivePoll() {
 // --- Event Listeners Setup ---
 function setupEventListeners() {
     // Nickname input change
-    elUsernameInput.addEventListener('change', handleUpdateUsername);
+    elUsernameInput.addEventListener('change', () => handleUpdateProfile(false));
     
     // Search input
     elSearchInput.addEventListener('input', (e) => {
@@ -489,24 +526,56 @@ function setupEventListeners() {
     elBtnTriggerUpload.addEventListener('click', () => elPollImageInput.click());
     elPollImageInput.addEventListener('change', handleImageSelect);
     elBtnClearUpload.addEventListener('click', clearImageUpload);
+
+    // Profile avatar bindings
+    elProfileAvatarTrigger.addEventListener('click', () => elProfileAvatarInput.click());
+    elProfileAvatarInput.addEventListener('change', handleProfileAvatarSelect);
 }
 
 // --- Action Handlers ---
 
-// Handle username configuration updates
-async function handleUpdateUsername() {
+// Handle profile picture select
+function handleProfileAvatarSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Limit to 150KB to keep network traffic and DB sizes highly efficient
+    if (file.size > 150 * 1024) {
+        showToast('頭像大小不能超過 150KB！', 'warning');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = async function(evt) {
+        voterAvatar = evt.target.result;
+        localStorage.setItem('decidely_voter_avatar', voterAvatar);
+        renderVoterAvatarHeader();
+        
+        // Sync to backend immediately
+        await handleUpdateProfile(true);
+    };
+    reader.onerror = function() {
+        showToast('讀取頭像檔案失敗。', 'warning');
+    };
+    reader.readAsDataURL(file);
+}
+
+// Handle profile (username & avatar) updates
+async function handleUpdateProfile(forceSync = false) {
     const newName = elUsernameInput.value.trim() || '匿名';
     elUsernameInput.value = newName;
     
-    if (newName === voterName) return;
+    // If nothing changed and not forced, skip
+    if (!forceSync && newName === voterName) return;
     
     try {
-        const response = await fetch('/api/users/update-name', {
+        const response = await fetch('/api/users/update-profile', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 voterId,
-                username: newName
+                username: newName,
+                avatarUrl: voterAvatar
             })
         });
         
@@ -514,11 +583,11 @@ async function handleUpdateUsername() {
         
         voterName = newName;
         localStorage.setItem('decidely_voter_name', voterName);
-        showToast('暱稱已更新！', 'success');
+        showToast('個人資料已更新！', 'success');
     } catch (e) {
-        console.error('更新暱稱失敗:', e);
-        showToast('更新暱稱失敗，請稍後再試。', 'warning');
-        elUsernameInput.value = voterName; // Restore
+        console.error('更新個人資料失敗:', e);
+        showToast('更新個人資料失敗，請稍後再試。', 'warning');
+        elUsernameInput.value = voterName; // Restore name
     }
 }
 
@@ -555,7 +624,7 @@ async function handleVote(pollId, optionId) {
             const response = await fetch(`/api/polls/${pollId}/vote`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ optionId, voterId, username: voterName, increment })
+                body: JSON.stringify({ optionId, voterId, username: voterName, increment, avatarUrl: voterAvatar })
             });
             if (!response.ok) throw new Error('API 錯誤');
             
@@ -580,7 +649,7 @@ async function handleVote(pollId, optionId) {
                 const response = await fetch(`/api/polls/${pollId}/vote`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ optionId, voterId, username: voterName, increment: -1 })
+                    body: JSON.stringify({ optionId, voterId, username: voterName, increment: -1, avatarUrl: voterAvatar })
                 });
                 if (!response.ok) throw new Error('API 錯誤');
                 
@@ -595,7 +664,7 @@ async function handleVote(pollId, optionId) {
                     await fetch(`/api/polls/${pollId}/vote`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1 })
+                        body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1, avatarUrl: voterAvatar })
                     });
                 }
                 
@@ -603,7 +672,7 @@ async function handleVote(pollId, optionId) {
                 const response = await fetch(`/api/polls/${pollId}/vote`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1 })
+                    body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1, avatarUrl: voterAvatar })
                 });
                 if (!response.ok) throw new Error('API 錯誤');
                 

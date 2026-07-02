@@ -56,6 +56,7 @@ db.serialize(() => {
         voterId TEXT NOT NULL,
         username TEXT NOT NULL,
         createdAt TEXT NOT NULL,
+        avatarUrl TEXT,
         PRIMARY KEY (pollId, voterId, optionId),
         FOREIGN KEY(pollId) REFERENCES polls(id) ON DELETE CASCADE,
         FOREIGN KEY(optionId) REFERENCES options(id) ON DELETE CASCADE
@@ -69,6 +70,9 @@ db.serialize(() => {
         // Ignore errors if columns already exist
     });
     db.run("ALTER TABLE polls ADD COLUMN imageUrl TEXT", (err) => {
+        // Ignore errors if columns already exist
+    });
+    db.run("ALTER TABLE votes ADD COLUMN avatarUrl TEXT", (err) => {
         // Ignore errors if columns already exist
     });
 
@@ -145,7 +149,7 @@ function getAllPollsData(callback) {
                                 id: o.id,
                                 text: o.text,
                                 votes: optionVotes.length,
-                                voters: optionVotes.map(v => ({ voterId: v.voterId, username: v.username }))
+                                voters: optionVotes.map(v => ({ voterId: v.voterId, username: v.username, avatarUrl: v.avatarUrl }))
                             };
                         });
                         
@@ -272,7 +276,7 @@ app.post('/api/polls/:id/options', (req, res) => {
 // Vote / retract vote on an option
 app.post('/api/polls/:id/vote', (req, res) => {
     const pollId = req.params.id;
-    const { optionId, voterId, username, increment } = req.body; // increment: 1 (vote) or -1 (retract)
+    const { optionId, voterId, username, increment, avatarUrl } = req.body; // increment: 1 (vote) or -1 (retract)
     
     if (!optionId || !voterId || !username || (increment !== 1 && increment !== -1)) {
         return res.status(400).json({ error: '不正確的投票參數。' });
@@ -312,8 +316,8 @@ app.post('/api/polls/:id/vote', (req, res) => {
                 
                 const createdAt = new Date().toISOString();
                 db.run(
-                    "INSERT OR REPLACE INTO votes (pollId, optionId, voterId, username, createdAt) VALUES (?, ?, ?, ?, ?)",
-                    [pollId, optionId, voterId, username, createdAt],
+                    "INSERT OR REPLACE INTO votes (pollId, optionId, voterId, username, createdAt, avatarUrl) VALUES (?, ?, ?, ?, ?, ?)",
+                    [pollId, optionId, voterId, username, createdAt, avatarUrl || null],
                     (err) => {
                         if (err) {
                             db.run("ROLLBACK");
@@ -414,20 +418,20 @@ app.post('/api/polls/:id/delete', (req, res) => {
     });
 });
 
-// Update username in all existing votes
-app.post('/api/users/update-name', (req, res) => {
-    const { voterId, username } = req.body;
+// Update profile (username & avatar) in all existing votes
+app.post('/api/users/update-profile', (req, res) => {
+    const { voterId, username, avatarUrl } = req.body;
     
     if (!voterId || !username) {
         return res.status(400).json({ error: 'voterId 與 username 為必填。' });
     }
     
     db.run(
-        "UPDATE votes SET username = ? WHERE voterId = ?",
-        [username, voterId],
+        "UPDATE votes SET username = ?, avatarUrl = ? WHERE voterId = ?",
+        [username, avatarUrl || null, voterId],
         (err) => {
             if (err) {
-                return res.status(500).json({ error: '更新暱稱失敗: ' + err.message });
+                return res.status(500).json({ error: '更新個人資料失敗: ' + err.message });
             }
             
             broadcastUpdates();

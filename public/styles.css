@@ -510,10 +510,37 @@ body {
     backdrop-filter: blur(8px);
 }
 
+.avatar-upload-wrapper {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    overflow: hidden;
+    transition: var(--transition-fast);
+}
+
+.avatar-upload-wrapper:hover {
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.1);
+}
+
+.avatar-upload-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
 .user-icon {
     color: var(--primary);
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
 }
 
 .user-name-label {
