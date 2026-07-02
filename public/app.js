@@ -4,6 +4,8 @@ let userVotes = {}; // Key: pollId, Value: optionId
 let activePollId = null;
 let ws = null;
 let reconnectTimer = null;
+let isManagingActivePoll = false;
+let verifiedPollPassword = '';
 
 // Voter Identification
 let voterId = null;
@@ -41,6 +43,17 @@ const elBtnCancelPoll = document.getElementById('btn-cancel-poll');
 const elBtnAddModalOption = document.getElementById('btn-add-modal-option');
 
 const elToastContainer = document.getElementById('toast-container');
+
+// Manage modal and buttons selectors
+const elBtnManagePoll = document.getElementById('btn-manage-poll');
+const elBtnDeletePoll = document.getElementById('btn-delete-poll');
+const elBtnExitManagePoll = document.getElementById('btn-exit-manage-poll');
+const elManageAuthModal = document.getElementById('manage-auth-modal');
+const elManageAuthForm = document.getElementById('manage-auth-form');
+const elManagePasswordInput = document.getElementById('manage-password-input');
+const elAuthErrorMsg = document.getElementById('auth-error-msg');
+const elBtnCloseAuthModal = document.getElementById('btn-close-auth-modal');
+const elBtnCancelAuth = document.getElementById('btn-cancel-auth');
 
 // --- Initialization ---
 function init() {
@@ -256,6 +269,13 @@ function renderActivePoll() {
     elPollTitle.textContent = activePoll.title;
     elPollDesc.textContent = activePoll.description || '此投票沒有提供描述。';
     
+    // Toggle managing class based on management state
+    if (isManagingActivePoll) {
+        elActiveSection.classList.add('managing');
+    } else {
+        elActiveSection.classList.remove('managing');
+    }
+    
     const createdDate = new Date(activePoll.createdAt);
     elPollDate.textContent = `建立於: ${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-${String(createdDate.getDate()).padStart(2, '0')}`;
     
@@ -375,6 +395,21 @@ function setupEventListeners() {
             closeCreateModal();
         }
     });
+
+    // Management bindings
+    elBtnManagePoll.addEventListener('click', handleManagePollClick);
+    elBtnExitManagePoll.addEventListener('click', handleExitManagePoll);
+    elBtnDeletePoll.addEventListener('click', handleDeletePollClick);
+    
+    elBtnCloseAuthModal.addEventListener('click', closeAuthModal);
+    elBtnCancelAuth.addEventListener('click', closeAuthModal);
+    elManageAuthForm.addEventListener('submit', handleAuthSubmit);
+    
+    elManageAuthModal.addEventListener('click', (e) => {
+        if (e.target === elManageAuthModal) {
+            closeAuthModal();
+        }
+    });
 }
 
 // --- Action Handlers ---
@@ -411,6 +446,8 @@ async function handleUpdateUsername() {
 // Handle Poll Select
 function selectPoll(pollId) {
     activePollId = pollId;
+    isManagingActivePoll = false;
+    verifiedPollPassword = '';
     renderPollsList(elSearchInput.value.trim());
     renderActivePoll();
 }
@@ -465,21 +502,8 @@ async function handleVote(pollId, optionId) {
 
 // Moderated delete vote action
 async function handleDeleteVote(pollId, optionId, targetVoterId, targetVoterName, hasPassword) {
-    let password = '';
-    
-    // If poll has password set, ask for it
-    if (hasPassword) {
-        password = prompt(`此投票已受密碼保護。\n請輸入密碼以剔除「${targetVoterName}」的投票紀錄：`);
-        if (password === null) return; // User cancelled
-        if (password.trim() === '') {
-            showToast('密碼不能為空！', 'warning');
-            return;
-        }
-    } else {
-        // No password set, confirm direct deletion
-        const confirmDelete = confirm(`確定要剔除「${targetVoterName}」在此選項的投票嗎？`);
-        if (!confirmDelete) return;
-    }
+    const confirmDelete = confirm(`確定要剔除「${targetVoterName}」在此選項的投票嗎？`);
+    if (!confirmDelete) return;
     
     try {
         const response = await fetch(`/api/polls/${pollId}/votes/delete`, {
@@ -488,12 +512,12 @@ async function handleDeleteVote(pollId, optionId, targetVoterId, targetVoterName
             body: JSON.stringify({
                 optionId,
                 voterId: targetVoterId,
-                password
+                password: verifiedPollPassword
             })
         });
         
         if (response.status === 403) {
-            showToast('密碼錯誤，剔除選票失敗！', 'warning');
+            showToast('密碼驗證失敗，無法剔除此投票！', 'warning');
             return;
         }
         
@@ -687,6 +711,107 @@ function showToast(message, type = 'info') {
             toast.remove();
         }, 300);
     }, 3000);
+}
+
+// --- Management Mode Handlers ---
+function handleManagePollClick() {
+    const activePoll = polls.find(p => p.id === activePollId);
+    if (!activePoll) return;
+    
+    // If poll has no password set, enter management mode immediately
+    if (!activePoll.hasPassword) {
+        isManagingActivePoll = true;
+        verifiedPollPassword = '';
+        updateUI();
+        showToast('已進入管理模式（此主題無密碼）。', 'success');
+        return;
+    }
+    
+    // Show password verification modal
+    elManagePasswordInput.value = '';
+    elAuthErrorMsg.classList.add('hidden');
+    elManageAuthModal.classList.remove('hidden');
+    setTimeout(() => elManagePasswordInput.focus(), 100);
+}
+
+function closeAuthModal() {
+    elManageAuthModal.classList.add('hidden');
+}
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const password = elManagePasswordInput.value;
+    
+    try {
+        const response = await fetch(`/api/polls/${activePollId}/verify-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        
+        if (response.status === 403) {
+            elAuthErrorMsg.textContent = '密碼錯誤，請再試一次！';
+            elAuthErrorMsg.classList.remove('hidden');
+            return;
+        }
+        
+        if (!response.ok) throw new Error('API 錯誤');
+        
+        isManagingActivePoll = true;
+        verifiedPollPassword = password;
+        closeAuthModal();
+        updateUI();
+        showToast('管理身分驗證成功，已啟用管理功能。', 'success');
+    } catch (e) {
+        console.error('驗證管理密碼失敗:', e);
+        showToast('密碼驗證失敗，請稍後再試。', 'warning');
+    }
+}
+
+function handleExitManagePoll() {
+    isManagingActivePoll = false;
+    verifiedPollPassword = '';
+    updateUI();
+    showToast('已退出管理模式。', 'info');
+}
+
+async function handleDeletePollClick() {
+    const activePoll = polls.find(p => p.id === activePollId);
+    if (!activePoll) return;
+    
+    const confirmDelete = confirm('⚠️ 警告：確定要永久刪除此投票主題嗎？\n此操作將同時刪除所有選項與投下的選票，且無法還原！');
+    if (!confirmDelete) return;
+    
+    try {
+        const response = await fetch(`/api/polls/${activePollId}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: verifiedPollPassword })
+        });
+        
+        if (response.status === 403) {
+            showToast('管理密碼驗證失敗，無法刪除主題！', 'warning');
+            return;
+        }
+        
+        if (!response.ok) throw new Error('API 錯誤');
+        
+        showToast('投票主題已成功刪除。', 'success');
+        activePollId = null;
+        isManagingActivePoll = false;
+        verifiedPollPassword = '';
+        
+        // Retrieve updated poll lists
+        fetchPolls().then(() => {
+            if (polls.length > 0) {
+                activePollId = polls[0].id;
+            }
+            updateUI();
+        });
+    } catch (e) {
+        console.error('刪除投票主題失敗:', e);
+        showToast('刪除投票主題失敗，請稍後再試。', 'warning');
+    }
 }
 
 // --- Safety Helpers ---

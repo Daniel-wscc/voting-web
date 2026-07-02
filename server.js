@@ -316,6 +316,53 @@ app.post('/api/polls/:id/votes/delete', (req, res) => {
     });
 });
 
+// Verify poll password for entering management mode
+app.post('/api/polls/:id/verify-password', (req, res) => {
+    const pollId = req.params.id;
+    const { password } = req.body;
+    
+    db.get("SELECT deletePassword FROM polls WHERE id = ?", [pollId], (err, poll) => {
+        if (err || !poll) {
+            return res.status(404).json({ error: '找不到該投票主題。' });
+        }
+        
+        if (poll.deletePassword && poll.deletePassword.trim() !== '') {
+            if (poll.deletePassword !== password) {
+                return res.status(403).json({ error: '密碼錯誤！' });
+            }
+        }
+        
+        res.json({ success: true });
+    });
+});
+
+// Delete entire poll topic
+app.post('/api/polls/:id/delete', (req, res) => {
+    const pollId = req.params.id;
+    const { password } = req.body;
+    
+    db.get("SELECT deletePassword FROM polls WHERE id = ?", [pollId], (err, poll) => {
+        if (err || !poll) {
+            return res.status(404).json({ error: '找不到該投票主題。' });
+        }
+        
+        if (poll.deletePassword && poll.deletePassword.trim() !== '') {
+            if (poll.deletePassword !== password) {
+                return res.status(403).json({ error: '密碼錯誤，無法刪除此投票主題！' });
+            }
+        }
+        
+        db.run("DELETE FROM polls WHERE id = ?", [pollId], (err) => {
+            if (err) {
+                return res.status(500).json({ error: '刪除投票主題失敗: ' + err.message });
+            }
+            
+            broadcastUpdates();
+            res.json({ success: true });
+        });
+    });
+});
+
 // Update username in all existing votes
 app.post('/api/users/update-name', (req, res) => {
     const { voterId, username } = req.body;

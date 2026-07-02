@@ -642,6 +642,18 @@ body {
     transform: translateY(-1px);
 }
 
+.btn-danger {
+    background: #ef4444;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-danger:hover {
+    transform: translateY(-1px);
+    background: #dc2626;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
 .btn-ghost {
     background: transparent;
     color: var(--text-muted);
@@ -1022,4 +1034,48 @@ body {
         min-height: 50vh;
         overflow-y: visible;
     }
+}
+
+/* --- Management Mode & Deletion Visual Toggles --- */
+.poll-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.poll-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Hide exit manage and delete buttons by default */
+#btn-exit-manage-poll,
+#btn-delete-poll {
+    display: none;
+}
+
+/* Hide vote deletion crosses by default */
+.btn-delete-vote {
+    display: none;
+}
+
+/* Management Mode Toggle Overrides */
+.managing #btn-manage-poll {
+    display: none;
+}
+
+.managing #btn-exit-manage-poll {
+    display: inline-flex;
+}
+
+.managing #btn-delete-poll {
+    display: inline-flex;
+}
+
+.managing .btn-delete-vote {
+    display: inline-flex;
 }

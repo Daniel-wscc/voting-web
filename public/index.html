@@ -67,9 +67,22 @@
             <section id="active-poll-section" class="poll-view">
                 <!-- Poll Header -->
                 <div class="poll-detail-header">
-                    <div class="poll-meta">
-                        <span class="badge" id="poll-status-badge">進行中</span>
-                        <span class="text-muted" id="poll-date">建立於: 2026-07-02</span>
+                    <div class="poll-header-top">
+                        <div class="poll-meta">
+                            <span class="badge" id="poll-status-badge">進行中</span>
+                            <span class="text-muted" id="poll-date">建立於: 2026-07-02</span>
+                        </div>
+                        <div class="poll-actions">
+                            <button id="btn-manage-poll" class="btn btn-secondary btn-sm" title="管理此投票主題">
+                                <i data-lucide="settings"></i> <span>管理</span>
+                            </button>
+                            <button id="btn-delete-poll" class="btn btn-danger btn-sm" title="刪除此投票主題">
+                                <i data-lucide="trash-2"></i> <span>刪除主題</span>
+                            </button>
+                            <button id="btn-exit-manage-poll" class="btn btn-secondary btn-sm" title="退出管理模式">
+                                <i data-lucide="log-out"></i> <span>退出管理</span>
+                            </button>
+                        </div>
                     </div>
                     <h1 id="active-poll-title" class="poll-title">載入中...</h1>
                     <p id="active-poll-desc" class="poll-description">請稍候，正在載入投票資訊。</p>
@@ -173,6 +186,36 @@
                     <button type="button" id="btn-cancel-poll" class="btn btn-ghost">取消</button>
                     <button type="submit" class="btn btn-primary">
                         <i data-lucide="check"></i> 建立並發佈
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Manage Password Authentication Modal -->
+    <div id="manage-auth-modal" class="modal-overlay hidden">
+        <div class="modal-card glass-panel animate-scale-up" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3><i data-lucide="shield-alert"></i> 管理員身分驗證</h3>
+                <button id="btn-close-auth-modal" class="btn-close" aria-label="關閉">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form id="manage-auth-form">
+                <div class="modal-body">
+                    <p class="auth-modal-desc" style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+                        請輸入此投票主題的管理密碼，驗證成功後即可剔除投票者選票，或是刪除整個主題。
+                    </p>
+                    <div class="form-group">
+                        <label for="manage-password-input">管理密碼</label>
+                        <input type="password" id="manage-password-input" placeholder="請輸入密碼..." required maxlength="20">
+                        <div class="error-message hidden" id="auth-error-msg" style="color: #ef4444; font-size: 0.8rem; margin-top: 6px;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="btn-cancel-auth" class="btn btn-ghost">取消</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> 驗證密碼
                     </button>
                 </div>
             </form>
