@@ -76,6 +76,44 @@ db.serialize(() => {
         // Ignore errors if columns already exist
     });
 
+    // Migration: Migrate votes table primary key if it is old (only 2 columns)
+    db.all("PRAGMA table_info(votes)", (err, columns) => {
+        if (err || !columns) return;
+        
+        // Count primary key columns
+        const pkColumns = columns.filter(col => col.pk > 0);
+        if (pkColumns.length > 0 && pkColumns.length < 3) {
+            console.log("⚠️ 檢測到舊版選票資料表主鍵結構，正在自動升級為多選聯合主鍵...");
+            
+            db.serialize(() => {
+                db.run("BEGIN TRANSACTION");
+                db.run("ALTER TABLE votes RENAME TO votes_old");
+                
+                db.run(`CREATE TABLE votes (
+                    pollId TEXT NOT NULL,
+                    optionId TEXT NOT NULL,
+                    voterId TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    createdAt TEXT NOT NULL,
+                    avatarUrl TEXT,
+                    PRIMARY KEY (pollId, voterId, optionId),
+                    FOREIGN KEY(pollId) REFERENCES polls(id) ON DELETE CASCADE,
+                    FOREIGN KEY(optionId) REFERENCES options(id) ON DELETE CASCADE
+                )`);
+                
+                // Copy data, ensuring we only copy unique combinations of pollId, optionId, voterId
+                db.run(`INSERT OR IGNORE INTO votes (pollId, optionId, voterId, username, createdAt, avatarUrl) 
+                        SELECT pollId, optionId, voterId, username, createdAt, avatarUrl FROM votes_old`);
+                
+                db.run("DROP TABLE votes_old");
+                db.run("COMMIT", (err) => {
+                    if (err) console.error("升級多選主鍵失敗:", err);
+                    else console.log("✅ 選票資料表主鍵升級成功！已支援多選投票。");
+                });
+            });
+        }
+    });
+
     // Check database status
     db.get("SELECT COUNT(*) as count FROM polls", (err, row) => {
         if (err) {

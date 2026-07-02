@@ -346,6 +346,36 @@ function renderActivePoll() {
     
     // Set Header details
     elPollTitle.textContent = activePoll.title;
+    
+    // Render type badges
+    const elActivePollBadges = document.getElementById('active-poll-badges');
+    if (elActivePollBadges) {
+        elActivePollBadges.innerHTML = '';
+        
+        // 1. Multiple or Single Choice Badge
+        const badgeChoice = document.createElement('span');
+        badgeChoice.className = 'badge-pill';
+        if (activePoll.allowMultiple) {
+            badgeChoice.classList.add('badge-pill-multi');
+            badgeChoice.textContent = '複選投票';
+        } else {
+            badgeChoice.classList.add('badge-pill-single');
+            badgeChoice.textContent = '單選投票';
+        }
+        elActivePollBadges.appendChild(badgeChoice);
+        
+        // 2. User options badge
+        const badgeOpts = document.createElement('span');
+        badgeOpts.className = 'badge-pill';
+        if (activePoll.allowUserOptions) {
+            badgeOpts.classList.add('badge-pill-user-opts');
+            badgeOpts.textContent = '任何人可新增選項';
+        } else {
+            badgeOpts.classList.add('badge-pill-single');
+            badgeOpts.textContent = '僅限管理員新增選項';
+        }
+        elActivePollBadges.appendChild(badgeOpts);
+    }
     if (activePoll.description && activePoll.description.trim() !== '') {
         elPollDesc.textContent = activePoll.description;
         elPollDesc.classList.remove('hidden');
