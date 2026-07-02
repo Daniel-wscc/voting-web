@@ -831,6 +831,13 @@ body {
     max-height: 90vh;
 }
 
+.modal-card form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
