@@ -53,6 +53,7 @@ const elManageAuthForm = document.getElementById('manage-auth-form');
 const elManagePasswordInput = document.getElementById('manage-password-input');
 const elAuthErrorMsg = document.getElementById('auth-error-msg');
 const elBtnCloseAuthModal = document.getElementById('btn-close-auth-modal');
+const elBtnCancelAuth = document.getElementById('btn-cancel-auth');
 // New settings selectors
 const elPollAllowMultiple = document.getElementById('poll-allow-multiple');
 const elPollAllowUserOptions = document.getElementById('poll-allow-user-options');
