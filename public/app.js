@@ -65,6 +65,7 @@ const elProfileAvatarPreview = document.getElementById('profile-avatar-preview')
 // New settings selectors
 const elPollAllowMultiple = document.getElementById('poll-allow-multiple');
 const elPollAllowUserOptions = document.getElementById('poll-allow-user-options');
+const elPollIsAnonymous = document.getElementById('poll-is-anonymous');
 const elPollImageInput = document.getElementById('poll-image-input');
 const elBtnTriggerUpload = document.getElementById('btn-trigger-upload');
 const elUploadFileName = document.getElementById('upload-file-name');
@@ -375,6 +376,17 @@ function renderActivePoll() {
             badgeOpts.textContent = '僅限管理員新增選項';
         }
         elActivePollBadges.appendChild(badgeOpts);
+        
+        // 3. Anonymous Poll Badge
+        if (activePoll.isAnonymous) {
+            const badgeAnon = document.createElement('span');
+            badgeAnon.className = 'badge-pill';
+            badgeAnon.style.background = 'rgba(239, 68, 68, 0.12)';
+            badgeAnon.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+            badgeAnon.style.color = '#fca5a5';
+            badgeAnon.textContent = '匿名投票';
+            elActivePollBadges.appendChild(badgeAnon);
+        }
     }
     if (activePoll.description && activePoll.description.trim() !== '') {
         elPollDesc.textContent = activePoll.description;
@@ -461,8 +473,8 @@ function renderActivePoll() {
         progressBar.style.width = '0%';
         optCard.appendChild(progressBar);
         
-        // Render voters lists below main if any
-        if (option.voters && option.voters.length > 0) {
+        // Render voters lists below main if any (and if not anonymous)
+        if (!activePoll.isAnonymous && option.voters && option.voters.length > 0) {
             const votersList = document.createElement('div');
             votersList.className = 'option-voters-list';
             
@@ -789,6 +801,7 @@ async function handleCreatePoll(e) {
     const deletePassword = document.getElementById('poll-password-input').value.trim();
     const allowMultiple = elPollAllowMultiple ? elPollAllowMultiple.checked : false;
     const allowUserOptions = elPollAllowUserOptions ? elPollAllowUserOptions.checked : true;
+    const isAnonymous = elPollIsAnonymous ? elPollIsAnonymous.checked : false;
     const image = selectedBase64Image;
     
     // Extract option inputs
@@ -822,6 +835,7 @@ async function handleCreatePoll(e) {
                 deletePassword,
                 allowMultiple,
                 allowUserOptions,
+                isAnonymous,
                 image
             })
         });
@@ -897,6 +911,7 @@ function resetCreateForm() {
     // Reset Checkboxes
     if (elPollAllowMultiple) elPollAllowMultiple.checked = false;
     if (elPollAllowUserOptions) elPollAllowUserOptions.checked = true;
+    if (elPollIsAnonymous) elPollIsAnonymous.checked = false;
     
     clearImageUpload();
     

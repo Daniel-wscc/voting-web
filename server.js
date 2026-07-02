@@ -72,6 +72,9 @@ db.serialize(() => {
     db.run("ALTER TABLE polls ADD COLUMN imageUrl TEXT", (err) => {
         // Ignore errors if columns already exist
     });
+    db.run("ALTER TABLE polls ADD COLUMN isAnonymous INTEGER DEFAULT 0", (err) => {
+        // Ignore errors if columns already exist
+    });
     db.run("ALTER TABLE votes ADD COLUMN avatarUrl TEXT", (err) => {
         // Ignore errors if columns already exist
     });
@@ -187,7 +190,11 @@ function getAllPollsData(callback) {
                                 id: o.id,
                                 text: o.text,
                                 votes: optionVotes.length,
-                                voters: optionVotes.map(v => ({ voterId: v.voterId, username: v.username, avatarUrl: v.avatarUrl }))
+                                voters: optionVotes.map(v => ({
+                                    voterId: v.voterId,
+                                    username: p.isAnonymous === 1 ? '匿名' : v.username,
+                                    avatarUrl: p.isAnonymous === 1 ? null : v.avatarUrl
+                                }))
                             };
                         });
                         
@@ -199,6 +206,7 @@ function getAllPollsData(callback) {
                         hasPassword: p.deletePassword && p.deletePassword.trim() !== '' ? true : false,
                         allowMultiple: p.allowMultiple === 1,
                         allowUserOptions: p.allowUserOptions === 1,
+                        isAnonymous: p.isAnonymous === 1,
                         imageUrl: p.imageUrl,
                         options: pollOptions
                     };
@@ -224,7 +232,7 @@ app.get('/api/polls', (req, res) => {
 
 // Create a new poll
 app.post('/api/polls', (req, res) => {
-    const { title, description, options, deletePassword, allowMultiple, allowUserOptions, image } = req.body;
+    const { title, description, options, deletePassword, allowMultiple, allowUserOptions, isAnonymous, image } = req.body;
     
     if (!title || !options || !Array.isArray(options) || options.length < 2) {
         return res.status(400).json({ error: '主題與至少兩個選項為必填項目。' });
@@ -237,7 +245,7 @@ app.post('/api/polls', (req, res) => {
         db.run("BEGIN TRANSACTION");
         
         db.run(
-            "INSERT INTO polls (id, title, description, createdAt, deletePassword, allowMultiple, allowUserOptions, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO polls (id, title, description, createdAt, deletePassword, allowMultiple, allowUserOptions, isAnonymous, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 pollId, 
                 title, 
@@ -246,6 +254,7 @@ app.post('/api/polls', (req, res) => {
                 deletePassword || null, 
                 allowMultiple ? 1 : 0, 
                 allowUserOptions ? 1 : 0, 
+                isAnonymous ? 1 : 0, 
                 image || null
             ],
             (err) => {
