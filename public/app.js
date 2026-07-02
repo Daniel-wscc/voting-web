@@ -346,7 +346,13 @@ function renderActivePoll() {
     
     // Set Header details
     elPollTitle.textContent = activePoll.title;
-    elPollDesc.textContent = activePoll.description || '此投票沒有提供描述。';
+    if (activePoll.description && activePoll.description.trim() !== '') {
+        elPollDesc.textContent = activePoll.description;
+        elPollDesc.classList.remove('hidden');
+    } else {
+        elPollDesc.textContent = '';
+        elPollDesc.classList.add('hidden');
+    }
     
     // Render description image if present
     if (activePoll.imageUrl) {
