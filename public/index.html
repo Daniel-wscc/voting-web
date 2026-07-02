@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>極簡智能投票系統 | Decidely</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar: Polls Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i data-lucide="vote" class="logo-icon"></i>
+                    <span>Decidely</span>
+                </div>
+                <button id="btn-create-poll-sidebar" class="btn btn-primary btn-sm btn-icon-only" title="建立新投票">
+                    <i data-lucide="plus"></i>
+                </button>
+            </div>
+            
+            <div class="search-box">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="poll-search" placeholder="搜尋投票項目...">
+            </div>
+
+            <div class="poll-list-wrapper">
+                <h3 class="section-title">所有投票</h3>
+                <div id="polls-list" class="polls-list">
+                    <!-- Dynamic polls load here -->
+                    <div class="polls-skeleton">
+                        <div class="skeleton-item"></div>
+                        <div class="skeleton-item"></div>
+                        <div class="skeleton-item"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <button id="btn-open-create" class="btn btn-secondary w-full">
+                    <i data-lucide="plus-circle"></i>
+                    <span>建立新投票</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Active Poll View -->
+            <section id="active-poll-section" class="poll-view">
+                <!-- Poll Header -->
+                <div class="poll-detail-header">
+                    <div class="poll-meta">
+                        <span class="badge" id="poll-status-badge">進行中</span>
+                        <span class="text-muted" id="poll-date">建立於: 2026-07-02</span>
+                    </div>
+                    <h1 id="active-poll-title" class="poll-title">載入中...</h1>
+                    <p id="active-poll-desc" class="poll-description">請稍候，正在載入投票資訊。</p>
+                </div>
+
+                <!-- Poll Options / Vote cards -->
+                <div class="options-container">
+                    <h3 class="section-title">選擇您的選項進行投票</h3>
+                    <div id="options-list" class="options-list">
+                        <!-- Dynamic options load here -->
+                    </div>
+                </div>
+
+                <!-- Add Option Form -->
+                <div class="add-option-card glass-panel">
+                    <h4 class="card-subtitle"><i data-lucide="plus-circle"></i> 新增自訂選項</h4>
+                    <p class="card-help">點子不夠多？為這個投票新增您自己的專屬選項！</p>
+                    <form id="add-option-form" class="inline-form">
+                        <div class="input-group">
+                            <input type="text" id="new-option-input" placeholder="輸入新選項內容..." required maxlength="80">
+                        </div>
+                        <button type="submit" class="btn btn-secondary btn-nowrap">
+                            <i data-lucide="plus"></i>
+                            <span>新增選項</span>
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Poll Summary Info -->
+                <div class="poll-stats-summary">
+                    <div class="stat-box">
+                        <span class="stat-val" id="total-votes-count">0</span>
+                        <span class="stat-lbl">總投票數</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-val" id="total-options-count">0</span>
+                        <span class="stat-lbl">選項數量</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- No Poll Selected Placeholder -->
+            <section id="no-poll-section" class="poll-view-placeholder hidden">
+                <div class="placeholder-content">
+                    <i data-lucide="help-circle" class="placeholder-icon"></i>
+                    <h2>沒有選取任何投票</h2>
+                    <p>請從左側列表選擇一個投票項目，或者點擊下方按鈕建立一個新的投票。</p>
+                    <button id="btn-open-create-placeholder" class="btn btn-primary">
+                        <i data-lucide="plus"></i>
+                        <span>建立首個投票</span>
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Create Poll Modal Overlay -->
+    <div id="create-modal" class="modal-overlay hidden">
+        <div class="modal-card glass-panel animate-scale-up">
+            <div class="modal-header">
+                <h3><i data-lucide="plus-circle"></i> 建立新投票主題</h3>
+                <button id="btn-close-modal" class="btn-close" aria-label="關閉">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <form id="create-poll-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="poll-title-input">投票問題 / 主題</label>
+                        <input type="text" id="poll-title-input" placeholder="例如：今天中午吃什麼？" required maxlength="100">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="poll-desc-input">投票描述 (選填)</label>
+                        <textarea id="poll-desc-input" rows="2" placeholder="為投票提供一些背景資訊..." maxlength="250"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>投票初始選項 (至少兩個)</label>
+                        <div id="modal-options-list" class="modal-options-list">
+                            <div class="modal-option-row">
+                                <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80">
+                                <span class="drag-placeholder"></span>
+                            </div>
+                            <div class="modal-option-row">
+                                <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80">
+                                <span class="drag-placeholder"></span>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-add-modal-option" class="btn btn-link btn-sm">
+                            <i data-lucide="plus"></i> 新增選項欄位
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="btn-cancel-poll" class="btn btn-ghost">取消</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i> 建立並發佈
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
