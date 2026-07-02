@@ -48,6 +48,9 @@ function init() {
     loadLocalVotes();
     setupEventListeners();
     
+    // Render static icons on page load immediately
+    lucide.createIcons();
+    
     fetchPolls().then(() => {
         if (!activePollId && polls.length > 0) {
             activePollId = polls[0].id;

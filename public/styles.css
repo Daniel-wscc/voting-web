@@ -705,6 +705,7 @@ body::after {
     border-radius: var(--radius-sm);
 }
 
+.btn-icon-only svg,
 .btn-icon-only i {
     width: 18px;
     height: 18px;
