@@ -7,7 +7,7 @@ const sqlite3 = require('sqlite3').verbose();
 const WebSocket = require('ws');
 
 // --- Configuration ---
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 6500;
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'data', 'voting.db');
 
 // Ensure database directory exists
@@ -22,6 +22,12 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
         console.error('無法連線至 SQLite 資料庫:', err.message);
     } else {
         console.log('已成功連線至 SQLite 資料庫:', DB_PATH);
+        
+        // Enforce SQLite Foreign Key constraints for Cascade Deletes
+        db.run("PRAGMA foreign_keys = ON;", (err) => {
+            if (err) console.error("啟用外鍵約束失敗:", err);
+            else console.log("SQLite 外鍵約束（Foreign Keys）已成功啟用。");
+        });
     }
 });
 
@@ -33,10 +39,10 @@ const DEFAULT_POLLS = [
         description: '隨著技術飛速發展，哪一項科技變革將在 2026 年對人類社會與工作型態帶來最深遠的影響？',
         createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
         options: [
-            { id: 'opt_s1_1', text: 'AI 代理與自主工作流 (Autonomous AI Agents)', votes: 42 },
-            { id: 'opt_s1_2', text: '通用人工智慧突破 (AGI Breakthrough)', votes: 28 },
-            { id: 'opt_s1_3', text: '空間運算與輕量化 AR 眼鏡 (Spatial Computing)', votes: 15 },
-            { id: 'opt_s1_4', text: '量子運算雲端商用化 (Commercial Quantum Computing)', votes: 8 }
+            { id: 'opt_s1_1', text: 'AI 代理與自主工作流 (Autonomous AI Agents)', votes: 12 },
+            { id: 'opt_s1_2', text: '通用人工智慧突破 (AGI Breakthrough)', votes: 8 },
+            { id: 'opt_s1_3', text: '空間運算與輕量化 AR 眼鏡 (Spatial Computing)', votes: 5 },
+            { id: 'opt_s1_4', text: '量子運算雲端商用化 (Commercial Quantum Computing)', votes: 2 }
         ]
     },
     {
@@ -45,10 +51,10 @@ const DEFAULT_POLLS = [
         description: '辛勤工作後的放鬆聚會！請大家投下神聖的一票，我們將依據投票結果訂位。如果有其他想吃的也可以自行新增！',
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         options: [
-            { id: 'opt_s2_1', text: '經典麻辣鴛鴦火鍋', votes: 12 },
-            { id: 'opt_s2_2', text: '日式炭火串燒居酒屋', votes: 18 },
-            { id: 'opt_s2_3', text: '美式精釀啤酒餐酒館', votes: 9 },
-            { id: 'opt_s2_4', text: '米其林精緻無菜單法式料理', votes: 5 }
+            { id: 'opt_s2_1', text: '經典麻辣鴛鴦火鍋', votes: 4 },
+            { id: 'opt_s2_2', text: '日式炭火串燒居酒屋', votes: 6 },
+            { id: 'opt_s2_3', text: '美式精釀啤酒餐酒館', votes: 3 },
+            { id: 'opt_s2_4', text: '米其林精緻無菜單法式料理', votes: 1 }
         ]
     },
     {
@@ -57,11 +63,11 @@ const DEFAULT_POLLS = [
         description: '開發者生態調查！不管是前端、後端、系統開發或 AI，哪款語言是你的生產力首選？',
         createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
         options: [
-            { id: 'opt_s3_1', text: 'TypeScript / JavaScript', votes: 56 },
-            { id: 'opt_s3_2', text: 'Rust', votes: 31 },
-            { id: 'opt_s3_3', text: 'Python', votes: 45 },
-            { id: 'opt_s3_4', text: 'Go', votes: 22 },
-            { id: 'opt_s3_5', text: 'Kotlin / Swift', votes: 11 }
+            { id: 'opt_s3_1', text: 'TypeScript / JavaScript', votes: 14 },
+            { id: 'opt_s3_2', text: 'Rust', votes: 8 },
+            { id: 'opt_s3_3', text: 'Python', votes: 11 },
+            { id: 'opt_s3_4', text: 'Go', votes: 6 },
+            { id: 'opt_s3_5', text: 'Kotlin / Swift', votes: 3 }
         ]
     }
 ];
@@ -71,15 +77,26 @@ db.serialize(() => {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        createdAt TEXT NOT NULL
+        createdAt TEXT NOT NULL,
+        deletePassword TEXT
     )`);
 
     db.run(`CREATE TABLE IF NOT EXISTS options (
         id TEXT PRIMARY KEY,
         pollId TEXT NOT NULL,
         text TEXT NOT NULL,
-        votes INTEGER DEFAULT 0,
         FOREIGN KEY(pollId) REFERENCES polls(id) ON DELETE CASCADE
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS votes (
+        pollId TEXT NOT NULL,
+        optionId TEXT NOT NULL,
+        voterId TEXT NOT NULL,
+        username TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        PRIMARY KEY (pollId, voterId),
+        FOREIGN KEY(pollId) REFERENCES polls(id) ON DELETE CASCADE,
+        FOREIGN KEY(optionId) REFERENCES options(id) ON DELETE CASCADE
     )`);
 
     // Check if database needs seeding
@@ -89,21 +106,35 @@ db.serialize(() => {
             return;
         }
         if (row.count === 0) {
-            console.log("資料庫無資料，開始寫入預設投票主題...");
+            console.log("資料庫無資料，開始寫入預設投票與模擬選票...");
             
-            const stmtPoll = db.prepare("INSERT INTO polls (id, title, description, createdAt) VALUES (?, ?, ?, ?)");
-            const stmtOpt = db.prepare("INSERT INTO options (id, pollId, text, votes) VALUES (?, ?, ?, ?)");
+            const stmtPoll = db.prepare("INSERT INTO polls (id, title, description, createdAt, deletePassword) VALUES (?, ?, ?, ?, ?)");
+            const stmtOpt = db.prepare("INSERT INTO options (id, pollId, text) VALUES (?, ?, ?)");
+            const stmtVote = db.prepare("INSERT INTO votes (pollId, optionId, voterId, username, createdAt) VALUES (?, ?, ?, ?, ?)");
             
             DEFAULT_POLLS.forEach(poll => {
-                stmtPoll.run(poll.id, poll.title, poll.description, poll.createdAt);
+                // Set default deletion password to 'admin' for demo seed polls
+                stmtPoll.run(poll.id, poll.title, poll.description, poll.createdAt, 'admin');
+                
                 poll.options.forEach(opt => {
-                    stmtOpt.run(opt.id, poll.id, opt.text, opt.votes);
+                    stmtOpt.run(opt.id, poll.id, opt.text);
+                    
+                    // Insert mock votes to populate UI lists
+                    for (let i = 0; i < opt.votes; i++) {
+                        const mockVoterId = `mock_voter_${poll.id}_${opt.id}_${i}`;
+                        const mockNames = ['Alice', 'Bob', 'Charlie', 'David', 'Eva', 'Frank', 'Grace'];
+                        const mockUsername = i % 4 === 0 ? mockNames[i % mockNames.length] : '匿名';
+                        stmtVote.run(poll.id, opt.id, mockVoterId, mockUsername, poll.createdAt);
+                    }
                 });
             });
             
             stmtPoll.finalize();
             stmtOpt.finalize();
-            console.log("預設投票主題寫入完畢！");
+            stmtVote.finalize((err) => {
+                if (err) console.error("模擬選票寫入失敗:", err);
+                else console.log("預設投票主題與模擬選票寫入完畢！");
+            });
         }
     });
 });
@@ -159,17 +190,34 @@ function getAllPollsData(callback) {
         db.all("SELECT * FROM options", (err, options) => {
             if (err) return callback(err);
             
-            const pollsMap = polls.map(p => ({
-                id: p.id,
-                title: p.title,
-                description: p.description,
-                createdAt: p.createdAt,
-                options: options
-                    .filter(o => o.pollId === p.id)
-                    .map(o => ({ id: o.id, text: o.text, votes: o.votes }))
-            }));
-            
-            callback(null, pollsMap);
+            db.all("SELECT * FROM votes ORDER BY createdAt ASC", (err, votes) => {
+                if (err) return callback(err);
+                
+                const pollsMap = polls.map(p => {
+                    const pollOptions = options
+                        .filter(o => o.pollId === p.id)
+                        .map(o => {
+                            const optionVotes = votes.filter(v => v.optionId === o.id);
+                            return {
+                                id: o.id,
+                                text: o.text,
+                                votes: optionVotes.length,
+                                voters: optionVotes.map(v => ({ voterId: v.voterId, username: v.username }))
+                            };
+                        });
+                        
+                    return {
+                        id: p.id,
+                        title: p.title,
+                        description: p.description,
+                        createdAt: p.createdAt,
+                        hasPassword: p.deletePassword && p.deletePassword.trim() !== '' ? true : false,
+                        options: pollOptions
+                    };
+                });
+                
+                callback(null, pollsMap);
+            });
         });
     });
 }
@@ -188,7 +236,7 @@ app.get('/api/polls', (req, res) => {
 
 // Create a new poll
 app.post('/api/polls', (req, res) => {
-    const { title, description, options } = req.body;
+    const { title, description, options, deletePassword } = req.body;
     
     if (!title || !options || !Array.isArray(options) || options.length < 2) {
         return res.status(400).json({ error: '主題與至少兩個選項為必填項目。' });
@@ -201,15 +249,15 @@ app.post('/api/polls', (req, res) => {
         db.run("BEGIN TRANSACTION");
         
         db.run(
-            "INSERT INTO polls (id, title, description, createdAt) VALUES (?, ?, ?, ?)",
-            [pollId, title, description || '', createdAt],
+            "INSERT INTO polls (id, title, description, createdAt, deletePassword) VALUES (?, ?, ?, ?, ?)",
+            [pollId, title, description || '', createdAt, deletePassword || null],
             (err) => {
                 if (err) {
                     db.run("ROLLBACK");
                     return res.status(500).json({ error: '建立投票失敗: ' + err.message });
                 }
                 
-                const stmtOpt = db.prepare("INSERT INTO options (id, pollId, text, votes) VALUES (?, ?, ?, 0)");
+                const stmtOpt = db.prepare("INSERT INTO options (id, pollId, text) VALUES (?, ?, ?)");
                 options.forEach(optText => {
                     const optId = `opt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
                     stmtOpt.run(optId, pollId, optText);
@@ -226,7 +274,6 @@ app.post('/api/polls', (req, res) => {
                             return res.status(500).json({ error: '提交交易失敗: ' + err.message });
                         }
                         
-                        // Success - Broadcast updates and return response
                         broadcastUpdates();
                         res.status(201).json({ id: pollId, title, description, createdAt });
                     });
@@ -245,7 +292,6 @@ app.post('/api/polls/:id/options', (req, res) => {
         return res.status(400).json({ error: '選項內容為必填。' });
     }
     
-    // First verify if poll exists
     db.get("SELECT id FROM polls WHERE id = ?", [pollId], (err, poll) => {
         if (err || !poll) {
             return res.status(404).json({ error: '找不到該投票主題。' });
@@ -254,7 +300,7 @@ app.post('/api/polls/:id/options', (req, res) => {
         const optionId = `opt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
         
         db.run(
-            "INSERT INTO options (id, pollId, text, votes) VALUES (?, ?, ?, 0)",
+            "INSERT INTO options (id, pollId, text) VALUES (?, ?, ?)",
             [optionId, pollId, text],
             (err) => {
                 if (err) {
@@ -262,7 +308,7 @@ app.post('/api/polls/:id/options', (req, res) => {
                 }
                 
                 broadcastUpdates();
-                res.status(201).json({ id: optionId, text, votes: 0 });
+                res.status(201).json({ id: optionId, text, voters: [] });
             }
         );
     });
@@ -271,34 +317,96 @@ app.post('/api/polls/:id/options', (req, res) => {
 // Vote / retract vote on an option
 app.post('/api/polls/:id/vote', (req, res) => {
     const pollId = req.params.id;
-    const { optionId, increment } = req.body; // increment: 1 (vote) or -1 (retract)
+    const { optionId, voterId, username, increment } = req.body; // increment: 1 (vote) or -1 (retract)
     
-    if (!optionId || (increment !== 1 && increment !== -1)) {
+    if (!optionId || !voterId || !username || (increment !== 1 && increment !== -1)) {
         return res.status(400).json({ error: '不正確的投票參數。' });
     }
     
-    // Check if option belongs to this poll
-    db.get("SELECT id, votes FROM options WHERE id = ? AND pollId = ?", [optionId, pollId], (err, option) => {
-        if (err || !option) {
-            return res.status(404).json({ error: '選項與投票主題不符或不存在。' });
-        }
-        
-        // Calculate new votes (never drop below 0)
-        const newVotes = Math.max(0, option.votes + increment);
-        
+    if (increment === -1) {
         db.run(
-            "UPDATE options SET votes = ? WHERE id = ? AND pollId = ?",
-            [newVotes, optionId, pollId],
+            "DELETE FROM votes WHERE pollId = ? AND voterId = ?",
+            [pollId, voterId],
             (err) => {
                 if (err) {
-                    return res.status(500).json({ error: '更新票數失敗: ' + err.message });
+                    return res.status(500).json({ error: '取消投票失敗: ' + err.message });
+                }
+                broadcastUpdates();
+                res.json({ success: true });
+            }
+        );
+    } else {
+        const createdAt = new Date().toISOString();
+        db.run(
+            "INSERT OR REPLACE INTO votes (pollId, optionId, voterId, username, createdAt) VALUES (?, ?, ?, ?, ?)",
+            [pollId, optionId, voterId, username, createdAt],
+            (err) => {
+                if (err) {
+                    return res.status(500).json({ error: '寫入選票失敗: ' + err.message });
+                }
+                broadcastUpdates();
+                res.json({ success: true });
+            }
+        );
+    }
+});
+
+// Moderated Delete Option Vote
+app.post('/api/polls/:id/votes/delete', (req, res) => {
+    const pollId = req.params.id;
+    const { optionId, voterId, password } = req.body;
+    
+    if (!optionId || !voterId) {
+        return res.status(400).json({ error: '選項 ID 與投票者識別碼為必填。' });
+    }
+    
+    db.get("SELECT deletePassword FROM polls WHERE id = ?", [pollId], (err, poll) => {
+        if (err || !poll) {
+            return res.status(404).json({ error: '找不到該投票主題。' });
+        }
+        
+        // If password protection is configured, check password correctness
+        if (poll.deletePassword && poll.deletePassword.trim() !== '') {
+            if (poll.deletePassword !== password) {
+                return res.status(403).json({ error: '密碼錯誤，無法剔除此投票！' });
+            }
+        }
+        
+        db.run(
+            "DELETE FROM votes WHERE pollId = ? AND optionId = ? AND voterId = ?",
+            [pollId, optionId, voterId],
+            (err) => {
+                if (err) {
+                    return res.status(500).json({ error: '剔除選票失敗: ' + err.message });
                 }
                 
                 broadcastUpdates();
-                res.json({ success: true, optionId, votes: newVotes });
+                res.json({ success: true });
             }
         );
     });
+});
+
+// Update username in all existing votes
+app.post('/api/users/update-name', (req, res) => {
+    const { voterId, username } = req.body;
+    
+    if (!voterId || !username) {
+        return res.status(400).json({ error: 'voterId 與 username 為必填。' });
+    }
+    
+    db.run(
+        "UPDATE votes SET username = ? WHERE voterId = ?",
+        [username, voterId],
+        (err) => {
+            if (err) {
+                return res.status(500).json({ error: '更新暱稱失敗: ' + err.message });
+            }
+            
+            broadcastUpdates();
+            res.json({ success: true });
+        }
+    );
 });
 
 // Catch-all route to serve index.html for SPA routing

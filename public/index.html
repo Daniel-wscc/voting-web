@@ -54,6 +54,15 @@
 
         <!-- Main Content Area -->
         <main class="main-content">
+            <!-- App Header Bar -->
+            <header class="app-header">
+                <div class="user-profile-widget">
+                    <i data-lucide="user" class="user-icon"></i>
+                    <span class="user-name-label">您的暱稱：</span>
+                    <input type="text" id="username-input" placeholder="匿名" maxlength="20">
+                </div>
+            </header>
+
             <!-- Active Poll View -->
             <section id="active-poll-section" class="poll-view">
                 <!-- Poll Header -->
@@ -153,6 +162,11 @@
                         <button type="button" id="btn-add-modal-option" class="btn btn-link btn-sm">
                             <i data-lucide="plus"></i> 新增選項欄位
                         </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="poll-password-input">設定投票管理密碼 (選填)</label>
+                        <input type="password" id="poll-password-input" placeholder="設定後，管理者可用此密碼剔除不符合規則的投票者選票" maxlength="20">
                     </div>
                 </div>
                 <div class="modal-footer">

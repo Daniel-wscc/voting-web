@@ -5,6 +5,10 @@ let activePollId = null;
 let ws = null;
 let reconnectTimer = null;
 
+// Voter Identification
+let voterId = null;
+let voterName = '匿名';
+
 // --- DOM Selector Elements ---
 const elPollsList = document.getElementById('polls-list');
 const elSearchInput = document.getElementById('poll-search');
@@ -25,6 +29,9 @@ const elCreateModal = document.getElementById('create-modal');
 const elCreatePollForm = document.getElementById('create-poll-form');
 const elModalOptionsList = document.getElementById('modal-options-list');
 
+// Nickname widget input
+const elUsernameInput = document.getElementById('username-input');
+
 // Buttons
 const elBtnCreateSidebar = document.getElementById('btn-create-poll-sidebar');
 const elBtnOpenCreate = document.getElementById('btn-open-create');
@@ -37,16 +44,46 @@ const elToastContainer = document.getElementById('toast-container');
 
 // --- Initialization ---
 function init() {
+    initVoterIdentity();
     loadLocalVotes();
     setupEventListeners();
+    
     fetchPolls().then(() => {
-        // Auto-select first poll if available and activePollId isn't set yet
         if (!activePollId && polls.length > 0) {
             activePollId = polls[0].id;
         }
         updateUI();
     });
     connectWebSocket();
+}
+
+// --- Voter Identity Generation & Loading ---
+function initVoterIdentity() {
+    try {
+        // 1. Get or generate Voter UUID
+        let id = localStorage.getItem('decidely_voter_id');
+        if (!id) {
+            id = `voter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            localStorage.setItem('decidely_voter_id', id);
+        }
+        voterId = id;
+        
+        // 2. Get or set default Voter Name
+        let name = localStorage.getItem('decidely_voter_name');
+        if (!name) {
+            name = '匿名';
+            localStorage.setItem('decidely_voter_name', name);
+        }
+        voterName = name;
+        
+        // Populate input field
+        if (elUsernameInput) {
+            elUsernameInput.value = voterName;
+        }
+    } catch (e) {
+        console.error('初始化使用者識別碼時發生錯誤:', e);
+        voterId = `voter_fallback_${Date.now()}`;
+    }
 }
 
 // --- Local Storage User Votes ---
@@ -88,7 +125,6 @@ function connectWebSocket() {
         ws.close();
     }
 
-    // Determine WS protocol (ws or wss) based on page protocol
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}`;
     
@@ -110,7 +146,6 @@ function connectWebSocket() {
                 console.log('接收到伺服器即時廣播，正在更新投票資料...');
                 polls = data.polls;
                 
-                // If the active poll was deleted (not supported yet, but safe-check)
                 if (activePollId && !polls.some(p => p.id === activePollId)) {
                     activePollId = polls.length > 0 ? polls[0].id : null;
                 }
@@ -190,6 +225,30 @@ function renderActivePoll() {
     
     showActivePollView();
     
+    // --- Self Healing of Local Votes ---
+    // If the local state says we voted for Option X, but Option X doesn't contain our voterId in DB, reset local state.
+    let selectedOptionId = userVotes[activePoll.id];
+    if (selectedOptionId) {
+        const activeOption = activePoll.options.find(opt => opt.id === selectedOptionId);
+        const userVotedInDb = activeOption && activeOption.voters.some(v => v.voterId === voterId);
+        if (!userVotedInDb) {
+            console.log('檢測到本機投票已被剔除或同步不一致，正在重設本機投票狀態...');
+            delete userVotes[activePoll.id];
+            saveLocalVotes();
+            selectedOptionId = null;
+        }
+    } else {
+        // Alternatively, if we didn't store it locally, but the DB shows our voterId has voted for option Y,
+        // let's heal the local storage to match the database! This is extra premium.
+        const dbVotedOption = activePoll.options.find(opt => opt.voters.some(v => v.voterId === voterId));
+        if (dbVotedOption) {
+            console.log('檢測到資料庫中已有您的選票，正在更新本機顯示狀態...');
+            userVotes[activePoll.id] = dbVotedOption.id;
+            saveLocalVotes();
+            selectedOptionId = dbVotedOption.id;
+        }
+    }
+    
     // Set Header details
     elPollTitle.textContent = activePoll.title;
     elPollDesc.textContent = activePoll.description || '此投票沒有提供描述。';
@@ -205,8 +264,6 @@ function renderActivePoll() {
     // Render options list
     elOptionsList.innerHTML = '';
     
-    const selectedOptionId = userVotes[activePoll.id];
-    
     activePoll.options.forEach(option => {
         const pct = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
         const isVoted = selectedOptionId === option.id;
@@ -215,8 +272,10 @@ function renderActivePoll() {
         optCard.className = `option-card ${isVoted ? 'voted' : ''}`;
         optCard.dataset.id = option.id;
         
-        optCard.innerHTML = `
-            <div class="option-progress-bar" style="width: 0%;"></div>
+        // Option main content (row layout)
+        const cardMain = document.createElement('div');
+        cardMain.className = 'option-card-main';
+        cardMain.innerHTML = `
             <div class="option-content">
                 <div class="vote-checkbox">
                     <i data-lucide="check"></i>
@@ -229,31 +288,69 @@ function renderActivePoll() {
             </div>
         `;
         
-        optCard.addEventListener('click', () => {
+        // Click to vote trigger
+        cardMain.addEventListener('click', () => {
             handleVote(activePoll.id, option.id);
         });
         
+        optCard.appendChild(cardMain);
+        
+        // Background progress bar
+        const progressBar = document.createElement('div');
+        progressBar.className = 'option-progress-bar';
+        progressBar.style.width = '0%';
+        optCard.appendChild(progressBar);
+        
+        // Render voters lists below main if any
+        if (option.voters && option.voters.length > 0) {
+            const votersList = document.createElement('div');
+            votersList.className = 'option-voters-list';
+            
+            option.voters.forEach(v => {
+                const badge = document.createElement('span');
+                badge.className = 'voter-badge';
+                badge.innerHTML = `
+                    <span>${escapeHTML(v.username)}</span>
+                    <button type="button" class="btn-delete-vote" title="剔除此選票">
+                        <i data-lucide="x"></i>
+                    </button>
+                `;
+                
+                // Clicking the x on the badge deletes the specific vote
+                const btnDelVote = badge.querySelector('.btn-delete-vote');
+                btnDelVote.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Stop vote card click trigger
+                    handleDeleteVote(activePoll.id, option.id, v.voterId, v.username, activePoll.hasPassword);
+                });
+                
+                votersList.appendChild(badge);
+            });
+            
+            optCard.appendChild(votersList);
+        }
+        
         elOptionsList.appendChild(optCard);
         
-        // Trigger width transition in next animation frame for visual grow effect
+        // Animate width progress bar
         requestAnimationFrame(() => {
-            const bar = optCard.querySelector('.option-progress-bar');
-            if (bar) bar.style.width = `${pct}%`;
+            progressBar.style.width = `${pct}%`;
         });
     });
     
-    // Reinitialize newly added Lucide icons
     lucide.createIcons();
 }
 
 // --- Event Listeners Setup ---
 function setupEventListeners() {
+    // Nickname input change
+    elUsernameInput.addEventListener('change', handleUpdateUsername);
+    
     // Search input
     elSearchInput.addEventListener('input', (e) => {
         renderPollsList(e.target.value.trim());
     });
 
-    // Sidebar & Placeholder button to open Create Poll Modal
+    // Modal triggers
     [elBtnCreateSidebar, elBtnOpenCreate, elBtnOpenCreatePlaceholder].forEach(btn => {
         if (btn) btn.addEventListener('click', openCreateModal);
     });
@@ -266,13 +363,10 @@ function setupEventListeners() {
     // Add extra option row in modal
     elBtnAddModalOption.addEventListener('click', addModalOptionField);
 
-    // Form submission: Create Poll
+    // Form submissions
     elCreatePollForm.addEventListener('submit', handleCreatePoll);
-
-    // Form submission: Add Option to Active Poll
     elAddOptionForm.addEventListener('submit', handleAddOption);
     
-    // Close modal on background click
     elCreateModal.addEventListener('click', (e) => {
         if (e.target === elCreateModal) {
             closeCreateModal();
@@ -282,14 +376,43 @@ function setupEventListeners() {
 
 // --- Action Handlers ---
 
+// Handle username configuration updates
+async function handleUpdateUsername() {
+    const newName = elUsernameInput.value.trim() || '匿名';
+    elUsernameInput.value = newName;
+    
+    if (newName === voterName) return;
+    
+    try {
+        const response = await fetch('/api/users/update-name', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                voterId,
+                username: newName
+            })
+        });
+        
+        if (!response.ok) throw new Error('API 錯誤');
+        
+        voterName = newName;
+        localStorage.setItem('decidely_voter_name', voterName);
+        showToast('暱稱已更新！', 'success');
+    } catch (e) {
+        console.error('更新暱稱失敗:', e);
+        showToast('更新暱稱失敗，請稍後再試。', 'warning');
+        elUsernameInput.value = voterName; // Restore
+    }
+}
+
 // Handle Poll Select
 function selectPoll(pollId) {
     activePollId = pollId;
-    renderPollsList(elSearchInput.value.trim()); // update active styling in sidebar
+    renderPollsList(elSearchInput.value.trim());
     renderActivePoll();
 }
 
-// Handle voting on an option via APIs
+// Handle voting on an option via API
 async function handleVote(pollId, optionId) {
     const poll = polls.find(p => p.id === pollId);
     if (!poll) return;
@@ -302,27 +425,27 @@ async function handleVote(pollId, optionId) {
             const response = await fetch(`/api/polls/${pollId}/vote`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ optionId, increment: -1 })
+                body: JSON.stringify({ optionId, voterId, username: voterName, increment: -1 })
             });
             if (!response.ok) throw new Error('API 錯誤');
             
             delete userVotes[pollId];
             showToast('已取消投票');
         } else {
-            // If already voted for another option, retract first
+            // Switch vote (retract old first)
             if (previousVoteOptionId) {
                 await fetch(`/api/polls/${pollId}/vote`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ optionId: previousVoteOptionId, increment: -1 })
+                    body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1 })
                 });
             }
             
-            // Cast new vote
+            // Cast new
             const response = await fetch(`/api/polls/${pollId}/vote`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ optionId, increment: 1 })
+                body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1 })
             });
             if (!response.ok) throw new Error('API 錯誤');
             
@@ -331,10 +454,52 @@ async function handleVote(pollId, optionId) {
         }
         
         saveLocalVotes();
-        // UI will be updated via WebSocket broadcast, which happens instantly.
     } catch (e) {
-        console.error('投票交易失敗:', e);
+        console.error('投票失敗:', e);
         showToast('投票處理失敗，請稍後再試。', 'warning');
+    }
+}
+
+// Moderated delete vote action
+async function handleDeleteVote(pollId, optionId, targetVoterId, targetVoterName, hasPassword) {
+    let password = '';
+    
+    // If poll has password set, ask for it
+    if (hasPassword) {
+        password = prompt(`此投票已受密碼保護。\n請輸入密碼以剔除「${targetVoterName}」的投票紀錄：`);
+        if (password === null) return; // User cancelled
+        if (password.trim() === '') {
+            showToast('密碼不能為空！', 'warning');
+            return;
+        }
+    } else {
+        // No password set, confirm direct deletion
+        const confirmDelete = confirm(`確定要剔除「${targetVoterName}」在此選項的投票嗎？`);
+        if (!confirmDelete) return;
+    }
+    
+    try {
+        const response = await fetch(`/api/polls/${pollId}/votes/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                optionId,
+                voterId: targetVoterId,
+                password
+            })
+        });
+        
+        if (response.status === 403) {
+            showToast('密碼錯誤，剔除選票失敗！', 'warning');
+            return;
+        }
+        
+        if (!response.ok) throw new Error('API 錯誤');
+        
+        showToast(`已成功剔除「${targetVoterName}」的投票選票。`, 'success');
+    } catch (e) {
+        console.error('剔除選票失敗:', e);
+        showToast('剔除選票失敗，請稍後再試。', 'warning');
     }
 }
 
@@ -348,7 +513,6 @@ async function handleAddOption(e) {
     const activePoll = polls.find(p => p.id === activePollId);
     if (!activePoll) return;
     
-    // Check for duplicate option locally first
     const duplicate = activePoll.options.some(opt => opt.text.toLowerCase() === text.toLowerCase());
     if (duplicate) {
         showToast('此選項已存在！', 'warning');
@@ -364,10 +528,8 @@ async function handleAddOption(e) {
         
         if (!response.ok) throw new Error('API 錯誤');
         
-        // Reset Form
         elNewOptionInput.value = '';
         showToast('已成功新增選項！', 'success');
-        // UI will update automatically via WebSocket
     } catch (e) {
         console.error('新增選項失敗:', e);
         showToast('新增選項失敗，請稍後再試。', 'warning');
@@ -380,6 +542,7 @@ async function handleCreatePoll(e) {
     
     const title = document.getElementById('poll-title-input').value.trim();
     const desc = document.getElementById('poll-desc-input').value.trim();
+    const deletePassword = document.getElementById('poll-password-input').value.trim();
     
     // Extract option inputs
     const optionInputs = elModalOptionsList.querySelectorAll('.modal-option-input');
@@ -392,7 +555,6 @@ async function handleCreatePoll(e) {
         }
     });
     
-    // Validations
     if (!title) {
         showToast('請輸入投票問題！', 'warning');
         return;
@@ -409,21 +571,19 @@ async function handleCreatePoll(e) {
             body: JSON.stringify({
                 title,
                 description: desc,
-                options
+                options,
+                deletePassword
             })
         });
         
         if (!response.ok) throw new Error('API 錯誤');
         
         const createdPoll = await response.json();
-        
-        // Focus the newly created poll
         activePollId = createdPoll.id;
         
         closeCreateModal();
         elSearchInput.value = '';
         showToast('新投票主題已發佈！', 'success');
-        // UI will update automatically via WebSocket
     } catch (e) {
         console.error('建立投票主題失敗:', e);
         showToast('發佈投票失敗，請稍後再試。', 'warning');
@@ -435,11 +595,10 @@ function openCreateModal() {
     elCreateModal.classList.remove('hidden');
     document.getElementById('poll-title-input').focus();
     
-    // Reset input fields
     document.getElementById('poll-title-input').value = '';
     document.getElementById('poll-desc-input').value = '';
+    document.getElementById('poll-password-input').value = '';
     
-    // Reset option fields back to just 2 blank fields
     elModalOptionsList.innerHTML = `
         <div class="modal-option-row">
             <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80">
@@ -470,7 +629,6 @@ function addModalOptionField() {
         </button>
     `;
     
-    // Wire up delete button handler
     const btnRemove = row.querySelector('.btn-remove-option');
     btnRemove.addEventListener('click', () => {
         row.remove();

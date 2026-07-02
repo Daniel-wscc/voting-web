@@ -17,10 +17,10 @@ COPY public/ ./public/
 RUN mkdir -p /app/data
 
 # Expose server port
-EXPOSE 3000
+EXPOSE 6500
 
 # Set default environmental variables
-ENV PORT=3000
+ENV PORT=6500
 ENV DATABASE_PATH=/app/data/voting.db
 
 # Define volume mount point

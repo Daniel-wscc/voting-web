@@ -7,13 +7,13 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "6500:6500"
     volumes:
       - voting_data:/app/data
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=6500
       - DATABASE_PATH=/app/data/voting.db
 
 volumes:
