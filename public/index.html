@@ -85,6 +85,9 @@
                         </div>
                     </div>
                     <h1 id="active-poll-title" class="poll-title">載入中...</h1>
+                    <div id="poll-image-container" class="poll-image-container hidden" style="margin-bottom: 16px; margin-top: 8px;">
+                        <img id="active-poll-image" src="" alt="投票主題圖片" style="max-width: 100%; max-height: 240px; border-radius: var(--radius-md); border: 1px solid var(--border-color); object-fit: contain;">
+                    </div>
                     <p id="active-poll-desc" class="poll-description">請稍候，正在載入投票資訊。</p>
                 </div>
 
@@ -177,9 +180,35 @@
                         </button>
                     </div>
 
+                    <div class="form-group-checkboxes" style="display: flex; gap: 24px; margin-bottom: 20px; margin-top: 8px;">
+                        <div class="form-group-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="poll-allow-multiple" style="width: auto; cursor: pointer; margin: 0;">
+                            <label for="poll-allow-multiple" style="margin-bottom: 0; cursor: pointer; font-size: 0.9rem;">允許多選</label>
+                        </div>
+                        <div class="form-group-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="poll-allow-user-options" checked style="width: auto; cursor: pointer; margin: 0;">
+                            <label for="poll-allow-user-options" style="margin-bottom: 0; cursor: pointer; font-size: 0.9rem;">任何人可以新增選項</label>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label for="poll-password-input">設定投票管理密碼 (選填)</label>
                         <input type="password" id="poll-password-input" placeholder="設定後，管理者可用此密碼剔除不符合規則的投票者選票" maxlength="20">
+                    </div>
+
+                    <div class="form-group">
+                        <label>上傳描述圖片 (選填)</label>
+                        <div class="file-upload-wrapper" style="display: flex; align-items: center; gap: 8px;">
+                            <input type="file" id="poll-image-input" accept="image/*" style="display: none;">
+                            <button type="button" id="btn-trigger-upload" class="btn btn-secondary btn-sm" style="display: flex; align-items: center; gap: 6px;">
+                                <i data-lucide="image" style="width: 16px; height: 16px;"></i> <span>選擇圖片</span>
+                            </button>
+                            <span id="upload-file-name" class="file-name text-muted" style="font-size: 0.85rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">未選擇檔案</span>
+                            <button type="button" id="btn-clear-upload" class="btn btn-link btn-sm hidden" style="color: #ef4444; font-size: 0.85rem; border: none; background: transparent; cursor: pointer; margin-left: 8px;">清除</button>
+                        </div>
+                        <div id="image-preview-container" class="hidden" style="margin-top: 12px;">
+                            <img id="image-preview" src="" alt="圖片預覽" style="max-height: 100px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); object-fit: contain;">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

@@ -1079,3 +1079,13 @@ body {
 .managing .btn-delete-vote {
     display: inline-flex;
 }
+
+/* Hide add-option-card by default if user options are disallowed */
+.user-options-disabled .add-option-card {
+    display: none;
+}
+
+/* Show it anyway if they are managing */
+.managing .add-option-card {
+    display: block !important;
+}

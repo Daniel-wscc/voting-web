@@ -37,7 +37,10 @@ db.serialize(() => {
         title TEXT NOT NULL,
         description TEXT,
         createdAt TEXT NOT NULL,
-        deletePassword TEXT
+        deletePassword TEXT,
+        allowMultiple INTEGER DEFAULT 0,
+        allowUserOptions INTEGER DEFAULT 1,
+        imageUrl TEXT
     )`);
 
     db.run(`CREATE TABLE IF NOT EXISTS options (
@@ -53,10 +56,21 @@ db.serialize(() => {
         voterId TEXT NOT NULL,
         username TEXT NOT NULL,
         createdAt TEXT NOT NULL,
-        PRIMARY KEY (pollId, voterId),
+        PRIMARY KEY (pollId, voterId, optionId),
         FOREIGN KEY(pollId) REFERENCES polls(id) ON DELETE CASCADE,
         FOREIGN KEY(optionId) REFERENCES options(id) ON DELETE CASCADE
     )`);
+
+    // Self-healing migrations for existing databases
+    db.run("ALTER TABLE polls ADD COLUMN allowMultiple INTEGER DEFAULT 0", (err) => {
+        // Ignore errors if columns already exist
+    });
+    db.run("ALTER TABLE polls ADD COLUMN allowUserOptions INTEGER DEFAULT 1", (err) => {
+        // Ignore errors if columns already exist
+    });
+    db.run("ALTER TABLE polls ADD COLUMN imageUrl TEXT", (err) => {
+        // Ignore errors if columns already exist
+    });
 
     // Check database status
     db.get("SELECT COUNT(*) as count FROM polls", (err, row) => {
@@ -141,6 +155,9 @@ function getAllPollsData(callback) {
                         description: p.description,
                         createdAt: p.createdAt,
                         hasPassword: p.deletePassword && p.deletePassword.trim() !== '' ? true : false,
+                        allowMultiple: p.allowMultiple === 1,
+                        allowUserOptions: p.allowUserOptions === 1,
+                        imageUrl: p.imageUrl,
                         options: pollOptions
                     };
                 });
@@ -165,7 +182,7 @@ app.get('/api/polls', (req, res) => {
 
 // Create a new poll
 app.post('/api/polls', (req, res) => {
-    const { title, description, options, deletePassword } = req.body;
+    const { title, description, options, deletePassword, allowMultiple, allowUserOptions, image } = req.body;
     
     if (!title || !options || !Array.isArray(options) || options.length < 2) {
         return res.status(400).json({ error: '主題與至少兩個選項為必填項目。' });
@@ -178,8 +195,17 @@ app.post('/api/polls', (req, res) => {
         db.run("BEGIN TRANSACTION");
         
         db.run(
-            "INSERT INTO polls (id, title, description, createdAt, deletePassword) VALUES (?, ?, ?, ?, ?)",
-            [pollId, title, description || '', createdAt, deletePassword || null],
+            "INSERT INTO polls (id, title, description, createdAt, deletePassword, allowMultiple, allowUserOptions, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                pollId, 
+                title, 
+                description || '', 
+                createdAt, 
+                deletePassword || null, 
+                allowMultiple ? 1 : 0, 
+                allowUserOptions ? 1 : 0, 
+                image || null
+            ],
             (err) => {
                 if (err) {
                     db.run("ROLLBACK");
@@ -252,32 +278,57 @@ app.post('/api/polls/:id/vote', (req, res) => {
         return res.status(400).json({ error: '不正確的投票參數。' });
     }
     
-    if (increment === -1) {
-        db.run(
-            "DELETE FROM votes WHERE pollId = ? AND voterId = ?",
-            [pollId, voterId],
-            (err) => {
-                if (err) {
-                    return res.status(500).json({ error: '取消投票失敗: ' + err.message });
+    db.get("SELECT allowMultiple FROM polls WHERE id = ?", [pollId], (err, poll) => {
+        if (err || !poll) {
+            return res.status(404).json({ error: '找不到該投票主題。' });
+        }
+        
+        const isMultiple = poll.allowMultiple === 1;
+        
+        db.serialize(() => {
+            db.run("BEGIN TRANSACTION");
+            
+            if (increment === -1) {
+                db.run(
+                    "DELETE FROM votes WHERE pollId = ? AND voterId = ? AND optionId = ?",
+                    [pollId, voterId, optionId],
+                    (err) => {
+                        if (err) {
+                            db.run("ROLLBACK");
+                            return res.status(500).json({ error: '取消投票失敗: ' + err.message });
+                        }
+                        db.run("COMMIT", (err) => {
+                            if (err) return res.status(500).json({ error: err.message });
+                            broadcastUpdates();
+                            res.json({ success: true });
+                        });
+                    }
+                );
+            } else {
+                // If single-choice mode, delete any previous votes by this user in this poll first
+                if (!isMultiple) {
+                    db.run("DELETE FROM votes WHERE pollId = ? AND voterId = ?", [pollId, voterId]);
                 }
-                broadcastUpdates();
-                res.json({ success: true });
+                
+                const createdAt = new Date().toISOString();
+                db.run(
+                    "INSERT OR REPLACE INTO votes (pollId, optionId, voterId, username, createdAt) VALUES (?, ?, ?, ?, ?)",
+                    [pollId, optionId, voterId, username, createdAt],
+                    (err) => {
+                        if (err) {
+                            db.run("ROLLBACK");
+                            return res.status(500).json({ error: '寫入選票失敗: ' + err.message });
+                        }
+                        db.run("COMMIT", (err) => {
+                            if (err) return res.status(500).json({ error: err.message });
+                            broadcastUpdates();
+                            res.json({ success: true });
+                        });
+                    }
+                );
             }
-        );
-    } else {
-        const createdAt = new Date().toISOString();
-        db.run(
-            "INSERT OR REPLACE INTO votes (pollId, optionId, voterId, username, createdAt) VALUES (?, ?, ?, ?, ?)",
-            [pollId, optionId, voterId, username, createdAt],
-            (err) => {
-                if (err) {
-                    return res.status(500).json({ error: '寫入選票失敗: ' + err.message });
-                }
-                broadcastUpdates();
-                res.json({ success: true });
-            }
-        );
-    }
+        });
+    });
 });
 
 // Moderated Delete Option Vote

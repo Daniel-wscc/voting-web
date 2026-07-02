@@ -53,7 +53,17 @@ const elManageAuthForm = document.getElementById('manage-auth-form');
 const elManagePasswordInput = document.getElementById('manage-password-input');
 const elAuthErrorMsg = document.getElementById('auth-error-msg');
 const elBtnCloseAuthModal = document.getElementById('btn-close-auth-modal');
-const elBtnCancelAuth = document.getElementById('btn-cancel-auth');
+// New settings selectors
+const elPollAllowMultiple = document.getElementById('poll-allow-multiple');
+const elPollAllowUserOptions = document.getElementById('poll-allow-user-options');
+const elPollImageInput = document.getElementById('poll-image-input');
+const elBtnTriggerUpload = document.getElementById('btn-trigger-upload');
+const elUploadFileName = document.getElementById('upload-file-name');
+const elBtnClearUpload = document.getElementById('btn-clear-upload');
+const elImagePreviewContainer = document.getElementById('image-preview-container');
+const elImagePreview = document.getElementById('image-preview');
+const elPollImageContainer = document.getElementById('poll-image-container');
+const elActivePollImage = document.getElementById('active-poll-image');
 
 // --- Initialization ---
 function init() {
@@ -242,26 +252,67 @@ function renderActivePoll() {
     showActivePollView();
     
     // --- Self Healing of Local Votes ---
-    // If the local state says we voted for Option X, but Option X doesn't contain our voterId in DB, reset local state.
-    let selectedOptionId = userVotes[activePoll.id];
-    if (selectedOptionId) {
-        const activeOption = activePoll.options.find(opt => opt.id === selectedOptionId);
-        const userVotedInDb = activeOption && activeOption.voters.some(v => v.voterId === voterId);
-        if (!userVotedInDb) {
-            console.log('檢測到本機投票已被剔除或同步不一致，正在重設本機投票狀態...');
-            delete userVotes[activePoll.id];
-            saveLocalVotes();
-            selectedOptionId = null;
+    let selectedOptionIds = userVotes[activePoll.id];
+    if (selectedOptionIds) {
+        if (activePoll.allowMultiple) {
+            // For multiple choice, check each voted option
+            if (!Array.isArray(selectedOptionIds)) {
+                selectedOptionIds = [selectedOptionIds];
+                userVotes[activePoll.id] = selectedOptionIds;
+            }
+            
+            const validVotedIds = [];
+            selectedOptionIds.forEach(optId => {
+                const opt = activePoll.options.find(o => o.id === optId);
+                const userVotedInDb = opt && opt.voters.some(v => v.voterId === voterId);
+                if (userVotedInDb) {
+                    validVotedIds.push(optId);
+                }
+            });
+            
+            if (validVotedIds.length !== selectedOptionIds.length) {
+                console.log('部分選票已被剔除，更新本機顯示狀態...');
+                if (validVotedIds.length > 0) {
+                    userVotes[activePoll.id] = validVotedIds;
+                } else {
+                    delete userVotes[activePoll.id];
+                }
+                saveLocalVotes();
+                selectedOptionIds = userVotes[activePoll.id];
+            }
+        } else {
+            // Single choice self-healing
+            if (Array.isArray(selectedOptionIds)) {
+                selectedOptionIds = selectedOptionIds[0] || null;
+                userVotes[activePoll.id] = selectedOptionIds;
+            }
+            if (selectedOptionIds) {
+                const activeOption = activePoll.options.find(opt => opt.id === selectedOptionIds);
+                const userVotedInDb = activeOption && activeOption.voters.some(v => v.voterId === voterId);
+                if (!userVotedInDb) {
+                    console.log('檢測到本機投票已被剔除或同步不一致，正在重設本機投票狀態...');
+                    delete userVotes[activePoll.id];
+                    saveLocalVotes();
+                    selectedOptionIds = null;
+                }
+            }
         }
     } else {
-        // Alternatively, if we didn't store it locally, but the DB shows our voterId has voted for option Y,
-        // let's heal the local storage to match the database! This is extra premium.
-        const dbVotedOption = activePoll.options.find(opt => opt.voters.some(v => v.voterId === voterId));
-        if (dbVotedOption) {
-            console.log('檢測到資料庫中已有您的選票，正在更新本機顯示狀態...');
-            userVotes[activePoll.id] = dbVotedOption.id;
-            saveLocalVotes();
-            selectedOptionId = dbVotedOption.id;
+        // Heal from DB if there's an entry but local is empty
+        if (activePoll.allowMultiple) {
+            const dbVotedOptions = activePoll.options.filter(opt => opt.voters.some(v => v.voterId === voterId));
+            if (dbVotedOptions.length > 0) {
+                userVotes[activePoll.id] = dbVotedOptions.map(opt => opt.id);
+                saveLocalVotes();
+                selectedOptionIds = userVotes[activePoll.id];
+            }
+        } else {
+            const dbVotedOption = activePoll.options.find(opt => opt.voters.some(v => v.voterId === voterId));
+            if (dbVotedOption) {
+                userVotes[activePoll.id] = dbVotedOption.id;
+                saveLocalVotes();
+                selectedOptionIds = dbVotedOption.id;
+            }
         }
     }
     
@@ -269,11 +320,27 @@ function renderActivePoll() {
     elPollTitle.textContent = activePoll.title;
     elPollDesc.textContent = activePoll.description || '此投票沒有提供描述。';
     
+    // Render description image if present
+    if (activePoll.imageUrl) {
+        elActivePollImage.src = activePoll.imageUrl;
+        elPollImageContainer.classList.remove('hidden');
+    } else {
+        elPollImageContainer.classList.add('hidden');
+        elActivePollImage.src = '';
+    }
+    
     // Toggle managing class based on management state
     if (isManagingActivePoll) {
         elActiveSection.classList.add('managing');
     } else {
         elActiveSection.classList.remove('managing');
+    }
+    
+    // Toggle user options restriction class
+    if (activePoll.allowUserOptions) {
+        elActiveSection.classList.remove('user-options-disabled');
+    } else {
+        elActiveSection.classList.add('user-options-disabled');
     }
     
     const createdDate = new Date(activePoll.createdAt);
@@ -289,7 +356,13 @@ function renderActivePoll() {
     
     activePoll.options.forEach(option => {
         const pct = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
-        const isVoted = selectedOptionId === option.id;
+        
+        let isVoted = false;
+        if (Array.isArray(selectedOptionIds)) {
+            isVoted = selectedOptionIds.includes(option.id);
+        } else {
+            isVoted = selectedOptionIds === option.id;
+        }
         
         const optCard = document.createElement('div');
         optCard.className = `option-card ${isVoted ? 'voted' : ''}`;
@@ -410,6 +483,11 @@ function setupEventListeners() {
             closeAuthModal();
         }
     });
+
+    // Image upload bindings
+    elBtnTriggerUpload.addEventListener('click', () => elPollImageInput.click());
+    elPollImageInput.addEventListener('change', handleImageSelect);
+    elBtnClearUpload.addEventListener('click', clearImageUpload);
 }
 
 // --- Action Handlers ---
@@ -457,40 +535,80 @@ async function handleVote(pollId, optionId) {
     const poll = polls.find(p => p.id === pollId);
     if (!poll) return;
     
-    const previousVoteOptionId = userVotes[pollId];
+    const isMultiple = poll.allowMultiple;
+    const votedVal = userVotes[pollId];
+    
+    // Check if voter has already voted for this option
+    let currentlyVoted = false;
+    if (isMultiple) {
+        currentlyVoted = Array.isArray(votedVal) && votedVal.includes(optionId);
+    } else {
+        currentlyVoted = votedVal === optionId;
+    }
+    
+    const increment = currentlyVoted ? -1 : 1;
     
     try {
-        if (previousVoteOptionId === optionId) {
-            // Retract vote
+        if (isMultiple) {
+            // Multiple-choice voting (independent toggles)
             const response = await fetch(`/api/polls/${pollId}/vote`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ optionId, voterId, username: voterName, increment: -1 })
+                body: JSON.stringify({ optionId, voterId, username: voterName, increment })
             });
             if (!response.ok) throw new Error('API 錯誤');
             
-            delete userVotes[pollId];
-            showToast('已取消投票');
-        } else {
-            // Switch vote (retract old first)
-            if (previousVoteOptionId) {
-                await fetch(`/api/polls/${pollId}/vote`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1 })
-                });
+            if (!Array.isArray(userVotes[pollId])) {
+                userVotes[pollId] = votedVal ? [votedVal] : [];
             }
             
-            // Cast new
-            const response = await fetch(`/api/polls/${pollId}/vote`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1 })
-            });
-            if (!response.ok) throw new Error('API 錯誤');
-            
-            userVotes[pollId] = optionId;
-            showToast('投票成功！');
+            if (increment === 1) {
+                userVotes[pollId].push(optionId);
+                showToast('投票成功！');
+            } else {
+                userVotes[pollId] = userVotes[pollId].filter(id => id !== optionId);
+                showToast('已取消該選項的投票');
+            }
+            if (userVotes[pollId].length === 0) {
+                delete userVotes[pollId];
+            }
+        } else {
+            // Single-choice voting
+            if (currentlyVoted) {
+                // Retract vote
+                const response = await fetch(`/api/polls/${pollId}/vote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ optionId, voterId, username: voterName, increment: -1 })
+                });
+                if (!response.ok) throw new Error('API 錯誤');
+                
+                delete userVotes[pollId];
+                showToast('已取消投票');
+            } else {
+                // Switch vote (backend handles retracting other votes in this poll,
+                // but we also send a retract locally if previous existed so that UI updates correctly)
+                const previousVoteOptionId = Array.isArray(votedVal) ? votedVal[0] : votedVal;
+                
+                if (previousVoteOptionId) {
+                    await fetch(`/api/polls/${pollId}/vote`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1 })
+                    });
+                }
+                
+                // Cast new
+                const response = await fetch(`/api/polls/${pollId}/vote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1 })
+                });
+                if (!response.ok) throw new Error('API 錯誤');
+                
+                userVotes[pollId] = optionId;
+                showToast('投票成功！');
+            }
         }
         
         saveLocalVotes();
@@ -570,6 +688,9 @@ async function handleCreatePoll(e) {
     const title = document.getElementById('poll-title-input').value.trim();
     const desc = document.getElementById('poll-desc-input').value.trim();
     const deletePassword = document.getElementById('poll-password-input').value.trim();
+    const allowMultiple = elPollAllowMultiple ? elPollAllowMultiple.checked : false;
+    const allowUserOptions = elPollAllowUserOptions ? elPollAllowUserOptions.checked : true;
+    const image = selectedBase64Image;
     
     // Extract option inputs
     const optionInputs = elModalOptionsList.querySelectorAll('.modal-option-input');
@@ -599,7 +720,10 @@ async function handleCreatePoll(e) {
                 title,
                 description: desc,
                 options,
-                deletePassword
+                deletePassword,
+                allowMultiple,
+                allowUserOptions,
+                image
             })
         });
         
@@ -618,6 +742,44 @@ async function handleCreatePoll(e) {
 }
 
 // --- Modal Helper Functions ---
+let selectedBase64Image = null;
+
+function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Limit to 2MB to keep DB sizes optimal
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('圖片大小不能超過 2MB！', 'warning');
+        clearImageUpload();
+        return;
+    }
+    
+    elUploadFileName.textContent = file.name;
+    elBtnClearUpload.classList.remove('hidden');
+    
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        selectedBase64Image = evt.target.result;
+        elImagePreview.src = selectedBase64Image;
+        elImagePreviewContainer.classList.remove('hidden');
+    };
+    reader.onerror = function() {
+        showToast('讀取圖片檔案失敗。', 'warning');
+        clearImageUpload();
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImageUpload() {
+    elPollImageInput.value = '';
+    elUploadFileName.textContent = '未選擇檔案';
+    elBtnClearUpload.classList.add('hidden');
+    elImagePreviewContainer.classList.add('hidden');
+    elImagePreview.src = '';
+    selectedBase64Image = null;
+}
+
 function openCreateModal() {
     elCreateModal.classList.remove('hidden');
     document.getElementById('poll-title-input').focus();
@@ -625,6 +787,12 @@ function openCreateModal() {
     document.getElementById('poll-title-input').value = '';
     document.getElementById('poll-desc-input').value = '';
     document.getElementById('poll-password-input').value = '';
+    
+    // Reset Checkboxes
+    if (elPollAllowMultiple) elPollAllowMultiple.checked = false;
+    if (elPollAllowUserOptions) elPollAllowUserOptions.checked = true;
+    
+    clearImageUpload();
     
     elModalOptionsList.innerHTML = `
         <div class="modal-option-row">
@@ -640,6 +808,7 @@ function openCreateModal() {
 
 function closeCreateModal() {
     elCreateModal.classList.add('hidden');
+    clearImageUpload();
 }
 
 function addModalOptionField() {
