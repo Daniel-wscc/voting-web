@@ -900,6 +900,17 @@ body {
     padding: 12px 16px;
     color: #fff;
     font-size: 0.95rem;
+}
+
+.form-group textarea {
+    resize: none;
+    height: 72px;
+    min-height: 72px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="password"],
+.form-group textarea {
     outline: none;
     transition: var(--transition-fast);
     font-family: var(--font-body);
