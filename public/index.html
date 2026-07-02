@@ -151,67 +151,78 @@
         <div class="modal-card glass-panel animate-scale-up">
             <div class="modal-header">
                 <h3><i data-lucide="plus-circle"></i> 建立新投票主題</h3>
-                <button id="btn-close-modal" class="btn-close" aria-label="關閉">
+                <button id="btn-close-modal" class="btn-close" aria-label="關閉" type="button">
                     <i data-lucide="x"></i>
                 </button>
             </div>
             <form id="create-poll-form">
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label for="poll-title-input">投票問題 / 主題</label>
-                        <input type="text" id="poll-title-input" placeholder="例如：今天中午吃什麼？" required maxlength="100">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="poll-desc-input">投票描述 (選填)</label>
-                        <textarea id="poll-desc-input" rows="2" placeholder="為投票提供一些背景資訊..." maxlength="250"></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>投票初始選項 (至少兩個)</label>
-                        <div id="modal-options-list" class="modal-options-list">
-                            <div class="modal-option-row">
-                                <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80">
-                                <span class="drag-placeholder"></span>
+                    <div class="create-poll-grid">
+                        <!-- Left Column: Title, Description, Options -->
+                        <div class="create-poll-col-left">
+                            <div class="form-group">
+                                <label for="poll-title-input">投票問題 / 主題 *</label>
+                                <input type="text" id="poll-title-input" placeholder="例如：今天午餐吃什麼？" required maxlength="100">
                             </div>
-                            <div class="modal-option-row">
-                                <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80">
-                                <span class="drag-placeholder"></span>
+                            
+                            <div class="form-group">
+                                <label for="poll-desc-input">投票描述 (選填)</label>
+                                <textarea id="poll-desc-input" rows="2" placeholder="為投票提供一些背景資訊..." maxlength="250"></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label>投票選項 (至少兩個)</label>
+                                <div id="modal-options-list" class="modal-options-list scrollable-options">
+                                    <div class="modal-option-row">
+                                        <input type="text" class="modal-option-input" placeholder="選項 1" required maxlength="80">
+                                        <span class="drag-placeholder"></span>
+                                    </div>
+                                    <div class="modal-option-row">
+                                        <input type="text" class="modal-option-input" placeholder="選項 2" required maxlength="80">
+                                        <span class="drag-placeholder"></span>
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-add-modal-option" class="btn btn-link btn-sm" style="margin-top: 8px;">
+                                    <i data-lucide="plus"></i> 新增選項欄位
+                                </button>
                             </div>
                         </div>
-                        <button type="button" id="btn-add-modal-option" class="btn btn-link btn-sm">
-                            <i data-lucide="plus"></i> 新增選項欄位
-                        </button>
-                    </div>
 
-                    <div class="form-group-checkboxes" style="display: flex; gap: 24px; margin-bottom: 20px; margin-top: 8px;">
-                        <div class="form-group-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="poll-allow-multiple" style="width: auto; cursor: pointer; margin: 0;">
-                            <label for="poll-allow-multiple" style="margin-bottom: 0; cursor: pointer; font-size: 0.9rem;">允許多選</label>
-                        </div>
-                        <div class="form-group-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="poll-allow-user-options" checked style="width: auto; cursor: pointer; margin: 0;">
-                            <label for="poll-allow-user-options" style="margin-bottom: 0; cursor: pointer; font-size: 0.9rem;">任何人可以新增選項</label>
-                        </div>
-                    </div>
+                        <!-- Right Column: Settings, Password, Image Upload -->
+                        <div class="create-poll-col-right">
+                            <div class="form-group">
+                                <label>投票設定</label>
+                                <div class="form-group-checkboxes-vertical">
+                                    <div class="form-group-checkbox">
+                                        <input type="checkbox" id="poll-allow-multiple">
+                                        <label for="poll-allow-multiple">允許多選</label>
+                                    </div>
+                                    <div class="form-group-checkbox">
+                                        <input type="checkbox" id="poll-allow-user-options" checked>
+                                        <label for="poll-allow-user-options">任何人可以新增選項</label>
+                                    </div>
+                                </div>
+                            </div>
 
-                    <div class="form-group">
-                        <label for="poll-password-input">設定投票管理密碼 (選填)</label>
-                        <input type="password" id="poll-password-input" placeholder="設定後，管理者可用此密碼剔除不符合規則的投票者選票" maxlength="20">
-                    </div>
+                            <div class="form-group">
+                                <label for="poll-password-input">設定投票管理密碼 (選填)</label>
+                                <input type="password" id="poll-password-input" placeholder="管理者可用此密碼進行選票管理與刪除主題" maxlength="20">
+                            </div>
 
-                    <div class="form-group">
-                        <label>上傳描述圖片 (選填)</label>
-                        <div class="file-upload-wrapper" style="display: flex; align-items: center; gap: 8px;">
-                            <input type="file" id="poll-image-input" accept="image/*" style="display: none;">
-                            <button type="button" id="btn-trigger-upload" class="btn btn-secondary btn-sm" style="display: flex; align-items: center; gap: 6px;">
-                                <i data-lucide="image" style="width: 16px; height: 16px;"></i> <span>選擇圖片</span>
-                            </button>
-                            <span id="upload-file-name" class="file-name text-muted" style="font-size: 0.85rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">未選擇檔案</span>
-                            <button type="button" id="btn-clear-upload" class="btn btn-link btn-sm hidden" style="color: #ef4444; font-size: 0.85rem; border: none; background: transparent; cursor: pointer; margin-left: 8px;">清除</button>
-                        </div>
-                        <div id="image-preview-container" class="hidden" style="margin-top: 12px;">
-                            <img id="image-preview" src="" alt="圖片預覽" style="max-height: 100px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); object-fit: contain;">
+                            <div class="form-group">
+                                <label>上傳描述圖片 (選填)</label>
+                                <div class="file-upload-wrapper" style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="file" id="poll-image-input" accept="image/*" style="display: none;">
+                                    <button type="button" id="btn-trigger-upload" class="btn btn-secondary btn-sm" style="display: flex; align-items: center; gap: 6px;">
+                                        <i data-lucide="image" style="width: 16px; height: 16px;"></i> <span>選擇圖片</span>
+                                    </button>
+                                    <span id="upload-file-name" class="file-name text-muted" style="font-size: 0.85rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">未選擇檔案</span>
+                                    <button type="button" id="btn-clear-upload" class="btn btn-link btn-sm hidden" style="color: #ef4444; font-size: 0.85rem; border: none; background: transparent; cursor: pointer; margin-left: 8px;">清除</button>
+                                </div>
+                                <div id="image-preview-container" class="hidden" style="margin-top: 12px;">
+                                    <img id="image-preview" src="" alt="圖片預覽" style="max-height: 80px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); object-fit: contain;">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -874,6 +874,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    flex: 1;
+    min-height: 0;
 }
 
 .form-group {
@@ -1115,4 +1117,99 @@ body {
 /* Show it anyway if they are managing */
 .managing .add-option-card {
     display: block !important;
+}
+
+/* --- Create Poll Two-Column Grid --- */
+#create-modal .modal-card {
+    max-width: 840px;
+}
+
+.create-poll-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 32px;
+}
+
+.create-poll-col-left,
+.create-poll-col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Scrollable Options Box */
+.scrollable-options {
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Custom Scrollbars */
+.scrollable-options::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.scrollable-options::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollable-options::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+}
+
+.scrollable-options::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+/* Vertical Checkbox List widget styling */
+.form-group-checkboxes-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+}
+
+.form-group-checkboxes-vertical .form-group-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.form-group-checkboxes-vertical input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
+    cursor: pointer;
+    margin: 0;
+}
+
+.form-group-checkboxes-vertical label {
+    margin: 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* Mobile Responsiveness for Grid */
+@media (max-width: 768px) {
+    .create-poll-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    #create-modal .modal-card {
+        width: 95% !important;
+        max-height: 95vh;
+    }
 }

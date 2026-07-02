@@ -903,6 +903,9 @@ function addModalOptionField() {
     
     elModalOptionsList.appendChild(row);
     lucide.createIcons();
+    
+    // Auto-scroll options list to the bottom
+    elModalOptionsList.scrollTop = elModalOptionsList.scrollHeight;
     row.querySelector('.modal-option-input').focus();
 }
 
