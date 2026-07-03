@@ -641,7 +641,33 @@ function selectPoll(pollId) {
     renderActivePoll();
 }
 
-// Handle voting on an option via API
+// Helper for Optimistic UI updates
+function applyOptimisticVote(pollId, optionId, increment) {
+    const poll = polls.find(p => p.id === pollId);
+    if (!poll) return;
+    
+    const option = poll.options.find(opt => opt.id === optionId);
+    if (!option) return;
+    
+    // Update vote count (min 0)
+    option.votes = Math.max(0, option.votes + increment);
+    
+    // Update voters list
+    if (!option.voters) option.voters = [];
+    if (increment === 1) {
+        if (!option.voters.some(v => v.voterId === voterId)) {
+            option.voters.push({
+                voterId: voterId,
+                username: poll.isAnonymous ? '匿名' : voterName,
+                avatarUrl: poll.isAnonymous ? null : voterAvatar
+            });
+        }
+    } else {
+        option.voters = option.voters.filter(v => v.voterId !== voterId);
+    }
+}
+
+// Handle voting on an option via API with Optimistic UI updates
 async function handleVote(pollId, optionId) {
     const poll = polls.find(p => p.id === pollId);
     if (!poll) return;
@@ -659,9 +685,33 @@ async function handleVote(pollId, optionId) {
     
     const increment = currentlyVoted ? -1 : 1;
     
+    // 1. Back up original state
+    const originalUserVotes = JSON.parse(JSON.stringify(userVotes));
+    const originalPolls = JSON.parse(JSON.stringify(polls));
+    
     try {
         if (isMultiple) {
-            // Multiple-choice voting (independent toggles)
+            // Update local votes list
+            if (!Array.isArray(userVotes[pollId])) {
+                userVotes[pollId] = votedVal ? [votedVal] : [];
+            }
+            if (increment === 1) {
+                userVotes[pollId].push(optionId);
+            } else {
+                userVotes[pollId] = userVotes[pollId].filter(id => id !== optionId);
+            }
+            if (userVotes[pollId].length === 0) {
+                delete userVotes[pollId];
+            }
+            
+            // Update in-memory option votes count and voters list
+            applyOptimisticVote(pollId, optionId, increment);
+            
+            // Render UI immediately!
+            saveLocalVotes();
+            updateUI();
+            
+            // Send request in background
             const response = await fetch(`/api/polls/${pollId}/vote`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -669,24 +719,18 @@ async function handleVote(pollId, optionId) {
             });
             if (!response.ok) throw new Error('API 錯誤');
             
-            if (!Array.isArray(userVotes[pollId])) {
-                userVotes[pollId] = votedVal ? [votedVal] : [];
-            }
+            showToast(increment === 1 ? '投票成功！' : '已取消該選項的投票');
             
-            if (increment === 1) {
-                userVotes[pollId].push(optionId);
-                showToast('投票成功！');
-            } else {
-                userVotes[pollId] = userVotes[pollId].filter(id => id !== optionId);
-                showToast('已取消該選項的投票');
-            }
-            if (userVotes[pollId].length === 0) {
-                delete userVotes[pollId];
-            }
         } else {
             // Single-choice voting
             if (currentlyVoted) {
                 // Retract vote
+                delete userVotes[pollId];
+                applyOptimisticVote(pollId, optionId, -1);
+                
+                saveLocalVotes();
+                updateUI();
+                
                 const response = await fetch(`/api/polls/${pollId}/vote`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -694,38 +738,49 @@ async function handleVote(pollId, optionId) {
                 });
                 if (!response.ok) throw new Error('API 錯誤');
                 
-                delete userVotes[pollId];
                 showToast('已取消投票');
             } else {
-                // Switch vote (backend handles retracting other votes in this poll,
-                // but we also send a retract locally if previous existed so that UI updates correctly)
+                // Switch vote
                 const previousVoteOptionId = Array.isArray(votedVal) ? votedVal[0] : votedVal;
                 
+                // Optimistically change local state
+                userVotes[pollId] = optionId;
                 if (previousVoteOptionId) {
-                    await fetch(`/api/polls/${pollId}/vote`, {
+                    applyOptimisticVote(pollId, previousVoteOptionId, -1);
+                }
+                applyOptimisticVote(pollId, optionId, 1);
+                
+                saveLocalVotes();
+                updateUI();
+                
+                // Send requests in background
+                if (previousVoteOptionId) {
+                    const retractResp = await fetch(`/api/polls/${pollId}/vote`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1, avatarUrl: voterAvatar })
                     });
+                    if (!retractResp.ok) throw new Error('取消先前投票失敗');
                 }
                 
-                // Cast new
-                const response = await fetch(`/api/polls/${pollId}/vote`, {
+                const castResp = await fetch(`/api/polls/${pollId}/vote`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1, avatarUrl: voterAvatar })
                 });
-                if (!response.ok) throw new Error('API 錯誤');
+                if (!castResp.ok) throw new Error('投新票失敗');
                 
-                userVotes[pollId] = optionId;
                 showToast('投票成功！');
             }
         }
-        
-        saveLocalVotes();
     } catch (e) {
-        console.error('投票失敗:', e);
-        showToast('投票處理失敗，請稍後再試。', 'warning');
+        console.error('投票失敗，正在還原狀態:', e);
+        // Rollback state on error
+        userVotes = originalUserVotes;
+        polls = originalPolls;
+        saveLocalVotes();
+        updateUI();
+        showToast('投票同步失敗，已還原狀態。', 'warning');
     }
 }
 
