@@ -431,96 +431,172 @@ function renderActivePoll() {
     elTotalVotes.textContent = totalVotes.toLocaleString();
     elTotalOptions.textContent = activePoll.options.length.toString();
     
-    // Render options list
-    elOptionsList.innerHTML = '';
+    // Render options list with in-place DOM updates to prevent progress bar animation flickering
+    const existingCards = elOptionsList.querySelectorAll('.option-card');
+    const canUpdateInPlace = existingCards.length === activePoll.options.length && 
+                             existingCards.length > 0 &&
+                             existingCards[0].dataset.optionId === activePoll.options[0].id;
+                             
+    if (!canUpdateInPlace) {
+        elOptionsList.innerHTML = '';
+    }
     
-    activePoll.options.forEach(option => {
+    activePoll.options.forEach((option, idx) => {
         const pct = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
         
         let isVoted = false;
-        if (Array.isArray(selectedOptionIds)) {
-            isVoted = selectedOptionIds.includes(option.id);
-        } else {
-            isVoted = selectedOptionIds === option.id;
+        if (selectedOptionIds) {
+            if (Array.isArray(selectedOptionIds)) {
+                isVoted = selectedOptionIds.includes(option.id);
+            } else {
+                isVoted = selectedOptionIds === option.id;
+            }
         }
         
-        const optCard = document.createElement('div');
-        optCard.className = `option-card ${isVoted ? 'voted' : ''}`;
-        optCard.dataset.id = option.id;
-        
-        // Option main content (row layout)
-        const cardMain = document.createElement('div');
-        cardMain.className = 'option-card-main';
-        cardMain.innerHTML = `
-            <div class="option-content">
-                <div class="vote-checkbox">
-                    <i data-lucide="check"></i>
-                </div>
-                <span class="option-text">${escapeHTML(option.text)}</span>
-            </div>
-            <div class="option-stats">
-                <span class="option-percentage">${pct.toFixed(0)}%</span>
-                <span class="option-votes">${option.votes} 票</span>
-            </div>
-        `;
-        
-        // Click to vote trigger
-        cardMain.addEventListener('click', () => {
-            handleVote(activePoll.id, option.id);
-        });
-        
-        optCard.appendChild(cardMain);
-        
-        // Background progress bar
-        const progressBar = document.createElement('div');
-        progressBar.className = 'option-progress-bar';
-        progressBar.style.width = '0%';
-        optCard.appendChild(progressBar);
-        
-        // Render voters lists below main if any (and if not anonymous)
-        if (!activePoll.isAnonymous && option.voters && option.voters.length > 0) {
-            const votersList = document.createElement('div');
-            votersList.className = 'option-voters-list';
+        if (canUpdateInPlace) {
+            // Update existing DOM nodes in-place
+            const optCard = existingCards[idx];
             
-            option.voters.forEach(v => {
-                const badge = document.createElement('span');
-                badge.className = 'voter-badge';
-                let avatarHTML = '';
-                if (v.avatarUrl) {
-                    avatarHTML = `<img src="${v.avatarUrl}" alt="Avatar" class="voter-badge-avatar" style="width: 16px; height: 16px; border-radius: 50%; object-fit: cover; margin-right: 6px;">`;
-                } else {
-                    avatarHTML = `<i data-lucide="user" class="voter-badge-avatar-icon" style="width: 12px; height: 12px; margin-right: 6px; color: var(--text-muted);"></i>`;
+            // Toggle voted class
+            if (isVoted) {
+                optCard.classList.add('voted');
+            } else {
+                optCard.classList.remove('voted');
+            }
+            
+            // Update percentage and vote count
+            const elPct = optCard.querySelector('.option-percentage');
+            if (elPct) elPct.textContent = `${pct.toFixed(0)}%`;
+            
+            const elVotes = optCard.querySelector('.option-votes');
+            if (elVotes) elVotes.textContent = `${option.votes} 票`;
+            
+            // Update progress bar width directly in place (retains current width, avoiding resetting animation!)
+            const progressBar = optCard.querySelector('.option-progress-bar');
+            if (progressBar) {
+                progressBar.style.width = `${pct}%`;
+            }
+            
+            // Re-render voters list (clear and rebuild inside existing container to avoid flicker)
+            let votersList = optCard.querySelector('.option-voters-list');
+            if (activePoll.isAnonymous || !option.voters || option.voters.length === 0) {
+                if (votersList) votersList.remove();
+            } else {
+                if (!votersList) {
+                    votersList = document.createElement('div');
+                    votersList.className = 'option-voters-list';
+                    optCard.appendChild(votersList);
                 }
                 
-                badge.innerHTML = `
-                    <div class="voter-badge-content" style="display: flex; align-items: center;">
-                        ${avatarHTML}
-                        <span>${escapeHTML(v.username)}</span>
-                    </div>
-                    <button type="button" class="btn-delete-vote" title="剔除此選票">
-                        <i data-lucide="x"></i>
-                    </button>
-                `;
-                
-                // Clicking the x on the badge deletes the specific vote
-                const btnDelVote = badge.querySelector('.btn-delete-vote');
-                btnDelVote.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Stop vote card click trigger
-                    handleDeleteVote(activePoll.id, option.id, v.voterId, v.username, activePoll.hasPassword);
+                votersList.innerHTML = '';
+                option.voters.forEach(v => {
+                    const badge = document.createElement('span');
+                    badge.className = 'voter-badge';
+                    let avatarHTML = '';
+                    if (v.avatarUrl) {
+                        avatarHTML = `<img src="${v.avatarUrl}" alt="Avatar" class="voter-badge-avatar" style="width: 16px; height: 16px; border-radius: 50%; object-fit: cover; margin-right: 6px;">`;
+                    } else {
+                        avatarHTML = `<i data-lucide="user" class="voter-badge-avatar-icon" style="width: 12px; height: 12px; margin-right: 6px; color: var(--text-muted);"></i>`;
+                    }
+                    
+                    badge.innerHTML = `
+                        <div class="voter-badge-content" style="display: flex; align-items: center;">
+                            ${avatarHTML}
+                            <span>${escapeHTML(v.username)}</span>
+                        </div>
+                        <button type="button" class="btn-delete-vote" title="剔除此選票">
+                            <i data-lucide="x"></i>
+                        </button>
+                    `;
+                    
+                    const btnDelVote = badge.querySelector('.btn-delete-vote');
+                    btnDelVote.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        handleDeleteVote(activePoll.id, option.id, v.voterId, v.username, activePoll.hasPassword);
+                    });
+                    
+                    votersList.appendChild(badge);
                 });
-                
-                votersList.appendChild(badge);
+            }
+        } else {
+            // Render option card from scratch
+            const optCard = document.createElement('div');
+            optCard.className = `option-card ${isVoted ? 'voted' : ''}`;
+            optCard.dataset.optionId = option.id; // Store optionId for identification
+            
+            // Option main content (row layout)
+            const cardMain = document.createElement('div');
+            cardMain.className = 'option-card-main';
+            cardMain.innerHTML = `
+                <div class="option-content">
+                    <div class="vote-checkbox">
+                        <i data-lucide="check"></i>
+                    </div>
+                    <span class="option-text">${escapeHTML(option.text)}</span>
+                </div>
+                <div class="option-stats">
+                    <span class="option-percentage">${pct.toFixed(0)}%</span>
+                    <span class="option-votes">${option.votes} 票</span>
+                </div>
+            `;
+            
+            // Click to vote trigger
+            cardMain.addEventListener('click', () => {
+                handleVote(activePoll.id, option.id);
             });
             
-            optCard.appendChild(votersList);
+            optCard.appendChild(cardMain);
+            
+            // Background progress bar
+            const progressBar = document.createElement('div');
+            progressBar.className = 'option-progress-bar';
+            progressBar.style.width = '0%';
+            optCard.appendChild(progressBar);
+            
+            // Render voters lists below main if any (and if not anonymous)
+            if (!activePoll.isAnonymous && option.voters && option.voters.length > 0) {
+                const votersList = document.createElement('div');
+                votersList.className = 'option-voters-list';
+                
+                option.voters.forEach(v => {
+                    const badge = document.createElement('span');
+                    badge.className = 'voter-badge';
+                    let avatarHTML = '';
+                    if (v.avatarUrl) {
+                        avatarHTML = `<img src="${v.avatarUrl}" alt="Avatar" class="voter-badge-avatar" style="width: 16px; height: 16px; border-radius: 50%; object-fit: cover; margin-right: 6px;">`;
+                    } else {
+                        avatarHTML = `<i data-lucide="user" class="voter-badge-avatar-icon" style="width: 12px; height: 12px; margin-right: 6px; color: var(--text-muted);"></i>`;
+                    }
+                    
+                    badge.innerHTML = `
+                        <div class="voter-badge-content" style="display: flex; align-items: center;">
+                            ${avatarHTML}
+                            <span>${escapeHTML(v.username)}</span>
+                        </div>
+                        <button type="button" class="btn-delete-vote" title="剔除此選票">
+                            <i data-lucide="x"></i>
+                        </button>
+                    `;
+                    
+                    const btnDelVote = badge.querySelector('.btn-delete-vote');
+                    btnDelVote.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        handleDeleteVote(activePoll.id, option.id, v.voterId, v.username, activePoll.hasPassword);
+                    });
+                    
+                    votersList.appendChild(badge);
+                });
+                
+                optCard.appendChild(votersList);
+            }
+            
+            elOptionsList.appendChild(optCard);
+            
+            // Animate width progress bar
+            requestAnimationFrame(() => {
+                progressBar.style.width = `${pct}%`;
+            });
         }
-        
-        elOptionsList.appendChild(optCard);
-        
-        // Animate width progress bar
-        requestAnimationFrame(() => {
-            progressBar.style.width = `${pct}%`;
-        });
     });
     
     lucide.createIcons();
