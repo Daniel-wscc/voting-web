@@ -12,6 +12,8 @@ let voterId = null;
 let voterName = '匿名';
 let voterAvatar = null; // Base64 image string
 
+const inFlightVotes = new Set(); // Track polls with active in-flight voting API requests to prevent self-healing race conditions
+
 // --- DOM Selector Elements ---
 const elPollsList = document.getElementById('polls-list');
 const elSearchInput = document.getElementById('poll-search');
@@ -282,7 +284,9 @@ function renderActivePoll() {
     
     // --- Self Healing of Local Votes ---
     let selectedOptionIds = userVotes[activePoll.id];
-    if (selectedOptionIds) {
+    if (inFlightVotes.has(activePoll.id)) {
+        console.log('投票同步中，暫停本機狀態自我修復檢查...');
+    } else if (selectedOptionIds) {
         if (activePoll.allowMultiple) {
             // For multiple choice, check each voted option
             if (!Array.isArray(selectedOptionIds)) {
@@ -689,6 +693,9 @@ async function handleVote(pollId, optionId) {
     const originalUserVotes = JSON.parse(JSON.stringify(userVotes));
     const originalPolls = JSON.parse(JSON.stringify(polls));
     
+    // Mark this poll as in-flight to prevent self-healing race condition
+    inFlightVotes.add(pollId);
+    
     try {
         if (isMultiple) {
             // Update local votes list
@@ -753,22 +760,13 @@ async function handleVote(pollId, optionId) {
                 saveLocalVotes();
                 updateUI();
                 
-                // Send requests in background
-                if (previousVoteOptionId) {
-                    const retractResp = await fetch(`/api/polls/${pollId}/vote`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ optionId: previousVoteOptionId, voterId, username: voterName, increment: -1, avatarUrl: voterAvatar })
-                    });
-                    if (!retractResp.ok) throw new Error('取消先前投票失敗');
-                }
-                
+                // Send single cast request (server handles retracting the previous vote automatically)
                 const castResp = await fetch(`/api/polls/${pollId}/vote`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ optionId, voterId, username: voterName, increment: 1, avatarUrl: voterAvatar })
                 });
-                if (!castResp.ok) throw new Error('投新票失敗');
+                if (!castResp.ok) throw new Error('投票失敗');
                 
                 showToast('投票成功！');
             }
@@ -781,7 +779,13 @@ async function handleVote(pollId, optionId) {
         saveLocalVotes();
         updateUI();
         showToast('投票同步失敗，已還原狀態。', 'warning');
+    } finally {
+        // Clear from in-flight list after a small buffer to let WebSocket messages settle
+        setTimeout(() => {
+            inFlightVotes.delete(pollId);
+        }, 800);
     }
+}
 }
 
 // Moderated delete vote action
