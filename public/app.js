@@ -786,7 +786,6 @@ async function handleVote(pollId, optionId) {
         }, 800);
     }
 }
-}
 
 // Moderated delete vote action
 async function handleDeleteVote(pollId, optionId, targetVoterId, targetVoterName, hasPassword) {
