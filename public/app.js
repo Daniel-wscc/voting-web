@@ -477,6 +477,30 @@ function renderActivePoll() {
                 progressBar.style.width = `${pct}%`;
             }
             
+            // Show/hide option delete button dynamically in place
+            const statsWrapper = optCard.querySelector('.option-stats-wrapper');
+            if (statsWrapper) {
+                let btnDel = statsWrapper.querySelector('.btn-delete-option');
+                if (isManagingActivePoll) {
+                    if (!btnDel) {
+                        btnDel = document.createElement('button');
+                        btnDel.type = 'button';
+                        btnDel.className = 'btn-delete-option';
+                        btnDel.title = '刪除此選項及所有選票';
+                        btnDel.innerHTML = `<i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>`;
+                        statsWrapper.appendChild(btnDel);
+                        
+                        btnDel.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleDeleteOption(activePoll.id, option.id, option.text);
+                        });
+                        lucide.createIcons({ node: btnDel });
+                    }
+                } else {
+                    if (btnDel) btnDel.remove();
+                }
+            }
+            
             // Re-render voters list (clear and rebuild inside existing container to avoid flicker)
             let votersList = optCard.querySelector('.option-voters-list');
             if (activePoll.isAnonymous || !option.voters || option.voters.length === 0) {
@@ -534,11 +558,29 @@ function renderActivePoll() {
                     </div>
                     <span class="option-text">${escapeHTML(option.text)}</span>
                 </div>
-                <div class="option-stats">
-                    <span class="option-percentage">${pct.toFixed(0)}%</span>
-                    <span class="option-votes">${option.votes} 票</span>
+                <div class="option-stats-wrapper" style="display: flex; align-items: center;">
+                    <div class="option-stats">
+                        <span class="option-percentage">${pct.toFixed(0)}%</span>
+                        <span class="option-votes">${option.votes} 票</span>
+                    </div>
                 </div>
             `;
+            
+            // Append delete option trash button if managing
+            const statsWrapper = cardMain.querySelector('.option-stats-wrapper');
+            if (isManagingActivePoll && statsWrapper) {
+                const btnDel = document.createElement('button');
+                btnDel.type = 'button';
+                btnDel.className = 'btn-delete-option';
+                btnDel.title = '刪除此選項及所有選票';
+                btnDel.innerHTML = `<i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>`;
+                statsWrapper.appendChild(btnDel);
+                
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleDeleteOption(activePoll.id, option.id, option.text);
+                });
+            }
             
             // Click to vote trigger
             cardMain.addEventListener('click', () => {
@@ -890,6 +932,41 @@ async function handleDeleteVote(pollId, optionId, targetVoterId, targetVoterName
     } catch (e) {
         console.error('剔除選票失敗:', e);
         showToast('剔除選票失敗，請稍後再試。', 'warning');
+    }
+}
+
+// Moderated delete option action
+async function handleDeleteOption(pollId, optionId, optionText) {
+    const confirmDelete = confirm(`確定要刪除整個選項「${optionText}」以及其所擁有的所有選票嗎？`);
+    if (!confirmDelete) return;
+    
+    try {
+        const response = await fetch(`/api/polls/${pollId}/options/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                optionId,
+                password: verifiedPollPassword
+            })
+        });
+        
+        if (response.status === 403) {
+            showToast('密碼驗證失敗，無法刪除此選項！', 'warning');
+            return;
+        }
+        
+        if (response.status === 400) {
+            const data = await response.json();
+            showToast(data.error || '無法刪除選項！', 'warning');
+            return;
+        }
+        
+        if (!response.ok) throw new Error('API 錯誤');
+        
+        showToast('已成功刪除該選項。', 'success');
+    } catch (e) {
+        console.error('刪除選項失敗:', e);
+        showToast('刪除選項失敗，請稍後再試。', 'warning');
     }
 }
 

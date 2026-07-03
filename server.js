@@ -418,6 +418,58 @@ app.post('/api/polls/:id/votes/delete', (req, res) => {
     });
 });
 
+// Moderated Delete Option
+app.post('/api/polls/:id/options/delete', (req, res) => {
+    const pollId = req.params.id;
+    const { optionId, password } = req.body;
+    
+    if (!optionId) {
+        return res.status(400).json({ error: '選項 ID 為必填。' });
+    }
+    
+    db.get("SELECT deletePassword FROM polls WHERE id = ?", [pollId], (err, poll) => {
+        if (err || !poll) {
+            return res.status(404).json({ error: '找不到該投票主題。' });
+        }
+        
+        // Enforce constraint that at least 2 options must remain in a poll
+        db.get("SELECT COUNT(*) as count FROM options WHERE pollId = ?", [pollId], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (row.count <= 2) {
+                return res.status(400).json({ error: '投票主題必須保留至少兩個選項，無法刪除！' });
+            }
+            
+            // If password protection is configured, check password correctness
+            if (poll.deletePassword && poll.deletePassword.trim() !== '') {
+                if (poll.deletePassword !== password) {
+                    return res.status(403).json({ error: '密碼錯誤，無法刪除此選項！' });
+                }
+            }
+            
+            db.serialize(() => {
+                db.run("BEGIN TRANSACTION");
+                
+                db.run(
+                    "DELETE FROM options WHERE pollId = ? AND id = ?",
+                    [pollId, optionId],
+                    (err) => {
+                        if (err) {
+                            db.run("ROLLBACK");
+                            return res.status(500).json({ error: '刪除選項失敗: ' + err.message });
+                        }
+                        
+                        db.run("COMMIT", (err) => {
+                            if (err) return res.status(500).json({ error: err.message });
+                            broadcastUpdates();
+                            res.json({ success: true });
+                        });
+                    }
+                );
+            });
+        });
+    });
+});
+
 // Verify poll password for entering management mode
 app.post('/api/polls/:id/verify-password', (req, res) => {
     const pollId = req.params.id;
